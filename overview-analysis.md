@@ -366,6 +366,87 @@ Given the complexity, Brint should:
 
 4. **Document escape hatches** - Sometimes developers need manual control; provide a way to opt out of reconciliation for performance-critical cases
 
+### Proposed Architecture: Operation-Based Array Tracking
+
+Rather than diffing before/after array states, chchchchanges could track the actual operations performed on arrays. Since it already uses Proxies, it can intercept `push`, `splice`, index assignment, etc. and emit specific change events.
+
+**Why this is better than diffing:**
+
+| Approach | What happens on `push(item)` |
+|----------|------------------------------|
+| Diff before/after | Compare arrays, discover last item is new, appendChild |
+| Track operation | Emit "push" event, appendChild directly |
+
+For simple operations, you skip diffing entirely. The intent is preserved.
+
+**chchchchanges side — new API for array operations:**
+
+```typescript
+Changes.detectArrayChanges(
+  () => state.items,
+  {
+    onPush: (item, index) => { ... },
+    onRemove: (item, index) => { ... },
+    onMove: (from, to) => { ... },
+    onReplace: (index, oldItem, newItem) => { ... },
+    // fallback for complex cases like sort() or external mutations
+    onReset: (newArray) => { ... },
+  }
+)
+```
+
+This keeps chchchchanges focused on change tracking without knowing about DOM.
+
+**Brint side — ListRenderSpec:**
+
+```typescript
+// ListRenderSpec consumes array operations directly
+["List", {
+  items: () => state.items,
+  key: item => item.id,
+  render: (item) => ["li", {}, item.text]
+}]
+```
+
+The `ListRenderSpec` would:
+1. Subscribe to array operations via `detectArrayChanges`
+2. Translate operations directly to DOM mutations
+3. Maintain a `key → DOM node` map for keyed reconciliation
+4. Fall back to diffing only for `onReset` (complex cases like `sort()`)
+
+**The integration architecture:**
+
+```
+chchchchanges                              Brint
+─────────────                              ─────
+Array Proxy                                ListRenderSpec
+    │                                           │
+    ├─ emits: { op: "push", item }    ──────────┼─▶ appendChild(render(item))
+    ├─ emits: { op: "splice", ... }   ──────────┼─▶ removeChild / insertBefore
+    ├─ emits: { op: "set", idx, val } ──────────┼─▶ update item at index
+    └─ emits: { op: "reset", items }  ──────────┴─▶ full reconciliation (LIS)
+```
+
+**Benefits of this split:**
+
+1. **Separation of concerns** — chchchchanges tracks changes, Brint handles DOM
+2. **Incremental adoption** — regular arrays still work (coarser reactivity), ListRenderSpec is an optimization for lists that need it
+3. **Reusable operations API** — the operation-based tracking is useful beyond Brint (undo/redo, sync, logging, debugging)
+4. **Minimal diffing** — LIS algorithm only needed for `reset` cases, not every update
+
+**Handling edge cases:**
+
+Some operations don't map cleanly to simple events:
+
+```javascript
+arr.sort()           // → onReset (order changed unpredictably)
+arr.reverse()        // → onReset or specialized onReverse
+arr.splice(2, 1, a, b)  // → combined remove + insert
+arr.length = 0       // → onReset with empty array
+```
+
+The `onReset` fallback ensures correctness even when operations are complex. Performance-sensitive apps would avoid patterns that trigger resets.
+
 ---
 
 ## Potential Pitfalls
