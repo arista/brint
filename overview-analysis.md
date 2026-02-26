@@ -737,6 +737,110 @@ function list(config, renderFn) {
 }
 ```
 
+### Attribute vs Property Handling
+
+HTML elements have two ways to set values:
+
+```javascript
+// Attribute — set via setAttribute(), always a string
+element.setAttribute('value', 'hello')
+
+// Property — set via JavaScript property access, can be any type
+element.value = 'hello'
+element.disabled = true      // boolean
+element.items = [1, 2, 3]    // array
+```
+
+**When the distinction matters:**
+
+1. **Boolean attributes** — `<input disabled="false">` is still disabled! The attribute's *presence* is what matters. But `element.disabled = false` works correctly.
+
+2. **Input value** — The `value` *attribute* is the initial value; the `value` *property* is the current value. They diverge after user input.
+
+3. **Web Components** — Custom elements often have properties that accept complex data:
+   ```javascript
+   // This works — property can hold any value
+   myElement.items = [{ id: 1, name: 'foo' }]
+
+   // This doesn't — attributes are always strings
+   myElement.setAttribute('items', [{ id: 1, name: 'foo' }])  // becomes "[object Object]"
+   ```
+
+4. **Event handlers** — The `onclick` attribute takes a string of code; the `onclick` property takes a function. (Brint uses `on: {}` for events, so this is handled separately.)
+
+**How other frameworks handle it:**
+
+| Framework | Syntax |
+|-----------|--------|
+| Vue | `:items.prop="data"` (`.prop` modifier) |
+| Lit | `.items=${data}` (dot prefix for properties) |
+| Solid | `prop:items={data}` (`prop:` prefix) |
+| React | Uses properties for most things, special-cases certain attributes |
+
+**Solution for Brint: `properties` key**
+
+Add a special `properties` key to the attrs object for setting DOM properties:
+
+```javascript
+["input", {
+  type: "checkbox",          // attribute
+  class: "my-checkbox",      // attribute
+  properties: {
+    checked: isChecked,      // property — boolean, not string
+    indeterminate: isIndeterminate  // property — no attribute equivalent
+  }
+}]
+
+["my-custom-element", {
+  class: "styled",           // attribute
+  "data-id": "123",          // attribute
+  properties: {
+    items: [1, 2, 3],        // property — complex data
+    config: { debug: true }  // property — object
+  }
+}]
+```
+
+**Reactive properties:**
+
+Properties can be reactive just like attributes:
+
+```javascript
+["my-custom-element", {
+  properties: {
+    items: () => state.items,        // reactive property
+    selected: () => state.selectedId // reactive property
+  }
+}]
+```
+
+When the reactive function's dependencies change, Brint updates the DOM property directly.
+
+**Why `properties` key over prefix convention:**
+
+| Approach | Example | Pros | Cons |
+|----------|---------|------|------|
+| `properties` key | `properties: { items: data }` | Explicit, clear separation | Slightly verbose |
+| Dot prefix | `".items": data` | Concise | Magical, easy to forget |
+| `prop:` prefix | `"prop:items": data` | Self-documenting | Verbose prefix |
+
+The `properties` key is explicit without being overly verbose. It clearly separates "these are attributes" from "these are properties" without requiring developers to remember prefix conventions.
+
+**Escape hatch: lifecycle for edge cases**
+
+For unusual cases, direct DOM access via lifecycle hooks is always available:
+
+```javascript
+function SpecialElement(props, ctx) {
+  ctx.onMount(() => {
+    const el = ctx.getElement()
+    // Do whatever you need with the raw DOM element
+    el.someWeirdProperty = props.weirdValue
+  })
+  return ["special-element", { class: "foo" }]
+}
+```
+
 ### Complete RenderSpec Grammar
 
 With these clarifications, the full grammar becomes:
@@ -751,8 +855,13 @@ RenderSpec =
   | [null, ...children]                       // Fragment
   | [Symbol, config, ...args]                 // Special form (List, etc.)
 
-attrs = object
-props = object
+attrs = {
+  [attrName: string]: attrValue,     // HTML attributes
+  on?: { [eventName]: handler },     // event listeners (from original spec)
+  xmlns?: string,                    // namespace (from original spec)
+  properties?: { [propName]: value } // DOM properties (for web components, etc.)
+}
+props = object                        // component props
 children = RenderSpec[]
 config = object (specific to each special form)
 ```
@@ -1061,8 +1170,8 @@ See **Deep Dive: RenderSpec Syntax Clarification**. The solution:
 - Fragments use `[null, child1, child2]` — unambiguous and intuitive
 - Special forms like `List` use symbols to avoid collision with tags or components
 
-### 8. Attribute/Property Confusion
-The docs mention attributes are set via object properties, but web components and some HTML elements distinguish between attributes and properties. The current design may not handle this well.
+### 8. Attribute/Property Confusion — Addressed
+See **Attribute vs Property Handling** in the RenderSpec syntax deep dive. Solution: a `properties` key in the attrs object for setting DOM properties (as opposed to HTML attributes). This is essential for web components and certain built-in element behaviors.
 
 ### 9. Component Lifecycle — Addressed
 The original overview doesn't mention lifecycle hooks, but there's no architectural barrier. See **Deep Dive: Component Lifecycle** above for a proposed solution using an explicit component context argument. Key points:
