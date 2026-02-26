@@ -449,6 +449,191 @@ The `onReset` fallback ensures correctness even when operations are complex. Per
 
 ---
 
+## Deep Dive: Component Lifecycle
+
+The original analysis raised concerns about missing lifecycle hooks. However, there's no architectural barrier to supporting them — it's primarily a matter of API design.
+
+### The Internal Component Representation
+
+Brint will necessarily have an internal structure managing each component. Call it `ComponentInstance`, `RenderContext`, or `ComponentHandle` — it tracks:
+
+- The `CachedFunction` wrapping the component's render function
+- The DOM node(s) produced by that component
+- Child components (and their internal representations)
+- Registered event listeners and cleanup callbacks
+
+This exists whether or not it's exposed to application code.
+
+### Automatic Cleanup (No Manual `remove()`)
+
+A key insight: applications shouldn't need to call `remove()` manually. When a component is removed from the tree (parent re-renders without it, or an ancestor unmounts), Brint walks the subtree and:
+
+1. Runs registered cleanup callbacks
+2. Calls `remove()` on all `CachedFunction`s
+3. Removes DOM nodes from the document
+4. Recursively cleans up child components
+
+This is how React, Vue, and Solid all work — cleanup is tied to component lifecycle, not manual bookkeeping. The `remove()` API in chchchchanges exists, but Brint manages it internally.
+
+### Exposing Lifecycle via Component Context
+
+One approach: pass component functions a context object alongside props.
+
+```typescript
+interface ComponentContext {
+  // Called after DOM is mounted; return value is cleanup function
+  onMount(callback: () => void | (() => void)): void
+
+  // Called when component is being removed
+  onUnmount(callback: () => void): void
+
+  // Called after component re-renders due to prop/dependency changes
+  onUpdate(callback: () => void): void
+
+  // Direct access to the component's root DOM element(s)
+  getElement(): Element | null
+}
+```
+
+**Usage example:**
+
+```javascript
+function Timer(props, ctx) {
+  let count = 0
+
+  ctx.onMount(() => {
+    console.log("Timer mounted")
+    const interval = setInterval(() => {
+      count++
+      // trigger re-render somehow
+    }, 1000)
+
+    // Cleanup function - called on unmount
+    return () => {
+      console.log("Timer unmounting, clearing interval")
+      clearInterval(interval)
+    }
+  })
+
+  ctx.onUpdate(() => {
+    console.log("Timer updated with new props:", props)
+  })
+
+  return ["div", {}, `Count: ${count}`]
+}
+
+// Usage as ComponentRenderSpec
+[Timer, { label: "My Timer" }]
+```
+
+### Why React Avoids This Pattern
+
+React components receive only props, not a context handle. Reasons:
+
+1. **Concurrent rendering** — React may render components speculatively, discard results, or render multiple times before commit. "The component instance" becomes ambiguous.
+
+2. **Server rendering** — Lifecycle hooks like `onMount` don't make sense on the server.
+
+3. **Purity ideology** — Components as pure functions: `props → UI`. Side effects are explicitly separated via `useEffect`.
+
+However, React's hooks are essentially a hidden component context accessed via call-order magic. When you call `useState` or `useEffect`, React looks up the "current component" from internal state. The "purity" is somewhat illusory.
+
+### Why It's Appropriate for Brint
+
+Brint has different constraints that make an explicit context reasonable:
+
+1. **Simpler execution model** — No concurrent rendering. Components render once and update in place. The component instance is unambiguous.
+
+2. **Explicit over magic** — No hook call-order rules to memorize ("hooks must be called in the same order every render"). The context is passed explicitly.
+
+3. **Lower-level positioning** — Brint isn't trying to be React. As a more primitive library, exposing the underlying machinery is appropriate.
+
+4. **Consistency with other patterns** — Event handlers receive `event`. Component functions receive `ctx`. It's a familiar pattern.
+
+5. **Easier debugging** — The context object can be inspected, logged, and understood without framework-specific devtools.
+
+### Alternative: Solid-Style Implicit Context
+
+Solid uses standalone functions that implicitly access the current component:
+
+```javascript
+import { onMount, onCleanup } from 'brint'
+
+function Timer(props) {
+  onMount(() => {
+    const interval = setInterval(..., 1000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  return ["div", {}, "..."]
+}
+```
+
+This is slightly more magical (relies on "current component" during execution) but more concise. It also matches how chchchchanges' `detectChanges` works — it implicitly uses a current context.
+
+### Comparison
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Explicit context argument | Clear, debuggable, no magic | More verbose, extra parameter |
+| Implicit context (Solid-style) | Concise, familiar to Solid/React users | Magic, must be called during render |
+| No lifecycle (current state) | Simplest | Apps can't do cleanup properly |
+
+### Recommendation
+
+Start with the **explicit context argument**. It's:
+- Easier to understand and document
+- Doesn't require implicit state management
+- Can always add implicit helpers later as sugar
+
+```javascript
+// Core API - explicit
+function MyComponent(props, ctx) {
+  ctx.onMount(() => { ... })
+  return ["div", {}, props.text]
+}
+
+// Optional sugar - implicit (added later if desired)
+function MyComponent(props) {
+  onMount(() => { ... })  // uses implicit current context
+  return ["div", {}, props.text]
+}
+```
+
+The explicit version is the foundation; the implicit version is just syntactic sugar on top.
+
+### Additional Lifecycle Considerations
+
+**Refs / DOM access:**
+
+```javascript
+function AutoFocus(props, ctx) {
+  ctx.onMount(() => {
+    const el = ctx.getElement()
+    el.querySelector('input')?.focus()
+  })
+
+  return ["input", { type: "text" }]
+}
+```
+
+**Effect dependencies (React-style):**
+
+This may not be needed if Brint's reactivity handles it. In React, `useEffect` deps exist because React doesn't track what you access. With chchchchanges tracking dependencies automatically, effects could re-run based on actual usage rather than declared deps.
+
+**Async lifecycle:**
+
+```javascript
+ctx.onMount(async () => {
+  const data = await fetchData()
+  // update state somehow
+})
+```
+
+Async mount handlers are useful for data fetching. The cleanup function pattern still works — return a sync cleanup function, or handle cancellation internally.
+
+---
+
 ## Potential Pitfalls
 
 ### 1. Proxy Limitations
@@ -461,15 +646,15 @@ The `onReset` fallback ensures correctness even when operations are complex. Per
 - **Debugging difficulty**: It's not obvious from reading code what will cause a re-render
 - **Stale closure problem**: Functions capturing values from outer scopes may not trigger re-renders when those values change (if they weren't accessed through a proxy)
 
-### 3. Array Handling Granularity
-The docs note that arrays use a "single change source for all reads/writes (optimized for iteration-heavy use)". This means:
-- Changing `arr[0]` will invalidate all listeners to the array
-- Could cause over-rendering for large lists where individual items change frequently
-- No built-in keyed reconciliation for list items
+### 3. Array Handling Granularity — Addressed
+The current chchchchanges design uses a single change source for arrays. See **Proposed Architecture: Operation-Based Array Tracking** in the list reconciliation deep dive for a solution:
+- chchchchanges emits specific operations (`push`, `splice`, etc.) instead of just "changed"
+- Brint's `ListRenderSpec` consumes these for direct DOM manipulation
+- Falls back to diffing only for complex cases like `sort()`
 
-### 4. Memory Management
-- **Listener cleanup**: The system requires explicit `remove()` calls to avoid memory leaks. If developers forget to clean up, change sources will hold references to dead listeners.
-- **Proxy cache growth**: Every object gets a cached proxy. Long-running apps with many transient objects could accumulate proxies.
+### 4. Memory Management — Partially Addressed
+- **Listener cleanup**: ~~Requires explicit `remove()` calls~~ — Addressed in **Deep Dive: Component Lifecycle**. Brint manages cleanup automatically when components unmount; apps don't call `remove()` manually.
+- **Proxy cache growth**: Still a concern. Every object gets a cached proxy. Long-running apps with many transient objects could accumulate proxies. May need a strategy for pruning unused proxies.
 
 ### 5. ChangeDomain Isolation
 - Objects can only belong to one ChangeDomain
@@ -492,10 +677,11 @@ The overview notes a TBD: "how to avoid confusing [ArrayRenderSpec] with child R
 ### 8. Attribute/Property Confusion
 The docs mention attributes are set via object properties, but web components and some HTML elements distinguish between attributes and properties. The current design may not handle this well.
 
-### 9. No Built-in Component Lifecycle
-There's no mention of lifecycle hooks (mount, unmount, update). Without these:
-- Cleanup logic (event listeners, subscriptions) is harder to manage
-- Integration with imperative APIs (focusing elements, animations) is unclear
+### 9. Component Lifecycle — Addressed
+The original overview doesn't mention lifecycle hooks, but there's no architectural barrier. See **Deep Dive: Component Lifecycle** above for a proposed solution using an explicit component context argument. Key points:
+- Brint manages cleanup automatically (no manual `remove()` calls)
+- Component functions receive a `ctx` argument with `onMount`, `onUnmount`, `onUpdate`
+- Explicit context avoids React's hook call-order magic
 
 ### 10. Server-Side Rendering
 No mention of SSR support. The Proxy-based approach may be difficult to make isomorphic.
@@ -526,12 +712,12 @@ Built with TypeScript from the start, which should provide good type inference f
 
 ## Open Questions
 
-1. How will list reconciliation work? Will there be keyed updates?
-2. What's the component lifecycle model?
-3. How will effects (side effects in response to state changes) be handled?
+1. ~~How will list reconciliation work? Will there be keyed updates?~~ — Addressed in **Deep Dive: List Reconciliation**
+2. ~~What's the component lifecycle model?~~ — Addressed in **Deep Dive: Component Lifecycle**
+3. How will effects (side effects in response to state changes) be handled? — Partially addressed; may be handled automatically via fine-grained reactivity
 4. What's the strategy for async data fetching?
 5. Will there be dev tools for debugging reactivity?
-6. How will refs (direct DOM access) work?
+6. ~~How will refs (direct DOM access) work?~~ — Addressed via `ctx.getElement()` in lifecycle deep dive
 7. What about portals, suspense, error boundaries?
 
 ---
