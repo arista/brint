@@ -116,6 +116,258 @@ Solid.js is perhaps the closest existing framework to Brint's approach.
 
 ---
 
+## Deep Dive: List Reconciliation and Keyed Updates
+
+List rendering is one of the most complex challenges in UI frameworks. When a list changes (items added, removed, reordered), the framework must decide how to update the DOM efficiently while preserving important state like focus, scroll position, animations, and component instances.
+
+### The Core Problem
+
+Consider rendering a list of items:
+
+```javascript
+items = [{id: 1, text: "A"}, {id: 2, text: "B"}, {id: 3, text: "C"}]
+```
+
+Now the user reorders the list:
+
+```javascript
+items = [{id: 3, text: "C"}, {id: 1, text: "A"}, {id: 2, text: "B"}]
+```
+
+A naive approach would:
+1. Update DOM node 1: "A" → "C"
+2. Update DOM node 2: "B" → "A"
+3. Update DOM node 3: "C" → "B"
+
+This is inefficient (3 updates instead of moving nodes) and destroys state. If item 1 had an `<input>` with focus, that focus is now on item 3's content.
+
+**Keyed reconciliation** solves this by tracking identity: "item with id=3 moved to position 0" rather than "position 0 now has different content."
+
+### How React Handles Lists
+
+React uses a `key` prop to identify list items:
+
+```jsx
+{items.map(item => (
+  <Item key={item.id} data={item} />
+))}
+```
+
+**Reconciliation Algorithm:**
+1. React builds a map of `key → fiber node` from the previous render
+2. For each item in the new list, it looks up the key in the map
+3. If found: reuse the fiber, update props, potentially move the DOM node
+4. If not found: create a new fiber and DOM node
+5. Any fibers not matched are unmounted (cleanup runs)
+
+**Key behaviors:**
+- Keys must be stable, unique among siblings
+- Using array index as key defeats the purpose (same problem as no key)
+- React warns if keys are missing in development
+- Reconciliation is O(n) for lists with keys
+
+**DOM Operations:**
+React batches DOM operations and uses insertBefore/appendChild to move nodes rather than recreating them. The diffing algorithm minimizes moves by processing the list in order and only moving nodes that are "out of place."
+
+### How Vue Handles Lists
+
+Vue uses `v-for` with a `:key` binding:
+
+```vue
+<template>
+  <Item v-for="item in items" :key="item.id" :data="item" />
+</template>
+```
+
+**Reconciliation Algorithm:**
+Vue 3 uses a more sophisticated algorithm than React:
+
+1. **Head/tail optimization**: Compare from both ends of the list, handling common cases (append, prepend, remove from end) in O(1)
+2. **Longest increasing subsequence (LIS)**: For complex reorders, Vue finds the LIS of indices to minimize DOM moves
+
+```
+Old: [A, B, C, D, E]
+New: [E, D, C, B, A]
+
+Head: A ≠ E, stop
+Tail: E ≠ A, stop
+Middle requires LIS algorithm
+```
+
+**Key behaviors:**
+- Without `:key`, Vue uses an "in-place patch" strategy (like the naive approach)
+- Vue recommends always providing keys for stateful components
+- Supports using objects as keys (not just strings/numbers)
+- Tracks component instances separately from DOM nodes
+
+### How Solid.js Handles Lists
+
+Solid provides specialized components for list rendering:
+
+**`<For>` - Keyed by reference:**
+```jsx
+<For each={items()}>
+  {(item, index) => <Item data={item} />}
+</For>
+```
+
+- Tracks items by reference identity (object ===)
+- When items move, the same DOM nodes move with them
+- Each item's render function runs only once (not on every update)
+- Index is a signal that updates if position changes
+
+**`<Index>` - Keyed by index:**
+```jsx
+<Index each={items()}>
+  {(item, index) => <Item data={item()} />}
+</Index>
+```
+
+- Tracks items by array index
+- Item is a signal that updates when the value at that index changes
+- Useful for primitive arrays where values change but order is stable
+
+**Reconciliation details:**
+- Solid's `<For>` uses a diffing algorithm similar to Vue's
+- Because Solid doesn't have a virtual DOM, it manipulates real DOM nodes directly
+- Component instances are preserved across moves (critical for maintaining state)
+- Solid's fine-grained reactivity means only changed properties update, not whole items
+
+**Why Solid needs special components:**
+Unlike React/Vue where you can use `.map()`, Solid's reactive model requires special handling:
+```jsx
+// This DOESN'T work correctly in Solid:
+{items().map(item => <Item data={item} />)}
+// The entire map re-runs on any change to items
+```
+
+### How Svelte Handles Lists
+
+Svelte uses `{#each}` blocks with a key expression:
+
+```svelte
+{#each items as item (item.id)}
+  <Item data={item} />
+{/each}
+```
+
+**Compiled output:**
+Svelte compiles this to efficient imperative code:
+
+```javascript
+// Simplified compiled output
+function create_each_block(ctx, item, i) {
+  // Create DOM for one item
+}
+
+function update(ctx, items) {
+  // Keyed reconciliation algorithm
+  // Moves, creates, destroys blocks as needed
+}
+```
+
+**Key behaviors:**
+- The parenthetical `(item.id)` specifies the key
+- Without a key, Svelte uses index-based updates
+- Svelte's compiler generates minimal, specific DOM operations
+- Transitions/animations integrate with the keyed lifecycle
+
+### Comparison Summary
+
+| Framework | Syntax | Default (no key) | Reconciliation |
+|-----------|--------|------------------|----------------|
+| React | `key={id}` | Index-based (warning) | Key map lookup |
+| Vue | `:key="id"` | In-place patch | LIS optimization |
+| Solid | `<For>` / `<Index>` | Reference identity | Similar to Vue |
+| Svelte | `(id)` | Index-based | Compiled algorithm |
+
+### Implications for Brint
+
+Given Brint's current design, several challenges emerge:
+
+**1. Array Change Granularity**
+
+chchchchanges tracks arrays with a single change source. This means any array mutation invalidates all listeners:
+
+```javascript
+const state = Changes.enableChanges({ items: [a, b, c] })
+
+// This invalidates ALL array listeners, not just those for index 0
+state.items[0] = newValue
+```
+
+For list reconciliation, Brint would need to know *what* changed:
+- Which indices were modified?
+- Was this an insertion, deletion, or move?
+- What are the stable identities of items?
+
+**2. Possible Approaches**
+
+**Option A: Special list component (like Solid)**
+```javascript
+// Hypothetical Brint API
+["For", { each: () => state.items, key: item => item.id },
+  (item, index) => ["li", {}, item.text]
+]
+```
+
+Pros: Explicit, matches Solid's proven model
+Cons: Different from other RenderSpecs, requires new concepts
+
+**Option B: Key attribute on ArrayRenderSpec**
+```javascript
+// Array with key function
+{ items: () => state.items, key: item => item.id }
+```
+
+Pros: Stays within RenderSpec model
+Cons: Overloads object syntax, could be confusing
+
+**Option C: Wrapper function that tracks array diffs**
+```javascript
+Changes.createKeyedList(state.items, item => item.id)
+// Returns a proxy that provides fine-grained change events
+```
+
+Pros: Keeps change tracking in chchchchanges
+Cons: Complex implementation, may not fit current architecture
+
+**3. Required Information for Reconciliation**
+
+Whatever approach is chosen, the reconciliation system needs:
+
+- **Old list state**: Previous items and their DOM nodes
+- **New list state**: Current items from re-evaluation
+- **Key function**: Maps items to stable identities
+- **DOM reference tracking**: Which DOM nodes belong to which keys
+
+**4. Additional Considerations**
+
+- **Nested reactivity**: If list items are objects, changes to item properties should update only that item's DOM, not the whole list
+- **Component state**: If list items are components, their internal state should survive reordering
+- **Enter/exit animations**: Keyed reconciliation enables animating items in/out
+- **Performance**: Large lists (1000+ items) need efficient algorithms; O(n²) won't scale
+
+### Recommendation
+
+Given the complexity, Brint should:
+
+1. **Add array diffing to chchchchanges** - Extend the array handler to optionally track granular changes (insertions, deletions, moves) rather than just "array changed"
+
+2. **Introduce a keyed list primitive** - Either a special RenderSpec type or a wrapper that:
+   - Accepts a key function
+   - Maintains a key → DOM node map
+   - Uses an efficient reconciliation algorithm (LIS-based like Vue)
+   - Preserves component instances across moves
+
+3. **Consider Solid's model** - Solid's `<For>` vs `<Index>` distinction is valuable:
+   - `<For>` for lists of objects where identity matters
+   - `<Index>` for primitive arrays where position is the identity
+
+4. **Document escape hatches** - Sometimes developers need manual control; provide a way to opt out of reconciliation for performance-critical cases
+
+---
+
 ## Potential Pitfalls
 
 ### 1. Proxy Limitations
