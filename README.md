@@ -1,4 +1,4 @@
 # Brint
 
-Reactive HTML rendering backed by chchchchanges
+TypeScript reactive HTML rendering library backed by chchchchanges
 
