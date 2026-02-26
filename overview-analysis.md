@@ -828,6 +828,200 @@ These are speculative, but the syntax accommodates them cleanly.
 
 ---
 
+## Deep Dive: Async and the Rendering Layer
+
+The chchchchanges docs note that "async functions are not supported" for dependency tracking. This raises questions about data fetching and async patterns. However, this may not be a limitation — it might be the right architectural boundary.
+
+### Philosophy: Async Lives Outside the Rendering Layer
+
+One perspective: the rendering system's job is translating a change-enabled model into HTML. Async processes update that model, but they're not part of the rendering step itself.
+
+```
+[Async processes] → [Change-enabled model] → [Brint] → [DOM]
+                           ↑
+                    includes loading/error state
+```
+
+In this model, async state is just... state:
+
+```javascript
+const state = Changes.enableChanges({
+  users: null,
+  usersLoading: true,
+  usersError: null
+})
+
+// Async happens in application code, completely outside Brint
+async function loadUsers() {
+  state.usersLoading = true
+  try {
+    state.users = await fetchUsers()
+  } catch (e) {
+    state.usersError = e
+  } finally {
+    state.usersLoading = false
+  }
+}
+
+// Component is a pure function of model state — no async awareness needed
+function UserList(props, ctx) {
+  if (state.usersLoading) return ["div", {}, "Loading..."]
+  if (state.usersError) return ["div", {}, `Error: ${state.usersError.message}`]
+  return [List, { each: () => state.users, key: u => u.id },
+    user => ["div", {}, user.name]
+  ]
+}
+```
+
+This is clean, explicit, and testable. The component doesn't know or care that data came from an async source.
+
+### Why React Added Suspense
+
+React's Suspense offers:
+
+1. **Declarative loading boundaries** — Components "suspend" if data isn't ready; fallbacks are declared higher in the tree
+2. **Avoid request waterfalls** — Start fetching before rendering, render as data arrives
+3. **Streaming SSR** — Send HTML progressively as data loads
+4. **Code splitting** — `lazy()` components that load on demand
+
+But these are specific UX patterns, not fundamental requirements:
+
+| Concern | Suspense approach | Async-outside approach |
+|---------|-------------------|------------------------|
+| Loading states | Implicit (component suspends) | Explicit (model has `loading` flag) |
+| Error handling | Error boundaries catch thrown promises/errors | Model has `error` field, component checks it |
+| Nested loading | Multiple Suspense boundaries | Multiple loading flags |
+| Code splitting | `lazy()` | Router-level or manual |
+
+### When Each Approach Works
+
+**Async-outside works great for:**
+- Client-side SPAs (the majority of apps)
+- When you want explicit control over loading UX
+- When async patterns are straightforward (fetch on mount, show spinner)
+- When you want the model to be the complete, inspectable picture
+
+**Suspense-style helps with:**
+- Deeply nested async with automatic fallback bubbling
+- Streaming SSR (progressively sending HTML)
+- Framework-level code splitting
+- "Render-as-you-fetch" patterns
+
+### Is This "Old Thinking"?
+
+No. MobX, Zustand, Jotai, Pinia — major state management libraries — all work this way. The model holds loading/error state; components render based on it. React pushed Suspense heavily, but it's far from universally adopted. Vue's Suspense is still experimental. Solid has "resources" but they're optional.
+
+Keeping async outside the rendering layer is a valid architectural choice. It's arguably *more* predictable because there's no magic "suspend" behavior.
+
+### Possible Enhancement: Promise Integration in chchchchanges
+
+That said, Promises already encapsulate pending/fulfilled/rejected states, and their callbacks could integrate with chchchchanges' reactivity.
+
+**Observation:** A Promise is really a state machine:
+
+```
+Pending → Fulfilled(value)
+       → Rejected(error)
+```
+
+chchchchanges could treat a Promise as a reactive value that transitions through these states.
+
+**Option A: Automatic Promise detection**
+
+```javascript
+const state = Changes.enableChanges({
+  users: fetchUsers()  // a Promise
+})
+
+// chchchchanges detects the Promise and wraps it
+// When accessed, it exposes reactive state:
+state.users.status   // "pending" | "fulfilled" | "rejected" (reactive)
+state.users.value    // T | undefined (reactive)
+state.users.error    // Error | undefined (reactive)
+```
+
+The Promise's `.then()` and `.catch()` handlers update these reactive properties, triggering re-renders.
+
+**Option B: Explicit resource primitive**
+
+```javascript
+import { Changes } from 'chchchchanges'
+
+const users = Changes.createResource(() => fetchUsers())
+
+// Returns a reactive resource object:
+users.loading  // boolean (reactive)
+users.data     // T | undefined (reactive)
+users.error    // Error | undefined (reactive)
+
+// Utility methods:
+users.refetch()   // re-run the fetcher
+users.mutate(val) // optimistically update data
+```
+
+This is similar to Solid's `createResource`, React Query, or SWR.
+
+**Option C: Brint-level Await form**
+
+```javascript
+import { Await } from 'brint'
+
+[Await, { promise: () => fetchUsers() },
+  {
+    pending: () => ["div", {}, "Loading..."],
+    fulfilled: (data) => [UserList, { users: data }],
+    rejected: (err) => ["div", {}, `Error: ${err.message}`]
+  }
+]
+```
+
+Similar to Svelte's `{#await promise}` blocks. Brint handles the Promise lifecycle internally.
+
+**How Promise integration would work in chchchchanges:**
+
+```javascript
+// When enableChanges encounters a Promise:
+function wrapPromise(promise, changeDomain) {
+  const state = {
+    status: "pending",
+    value: undefined,
+    error: undefined
+  }
+
+  // Make state reactive
+  const reactiveState = changeDomain.enableChanges(state)
+
+  // Promise callbacks update reactive state
+  promise.then(
+    value => {
+      reactiveState.status = "fulfilled"
+      reactiveState.value = value
+    },
+    error => {
+      reactiveState.status = "rejected"
+      reactiveState.error = error
+    }
+  )
+
+  return reactiveState
+}
+```
+
+The key insight: Promise callbacks are synchronous from the reactive system's perspective — `.then()` is called synchronously when the Promise settles, and that callback synchronously updates the reactive state. No async dependency tracking needed.
+
+### Recommendation
+
+Start with the **async-outside** approach. It's simple, explicit, and covers most use cases. Loading/error state lives in the model; components render it.
+
+If patterns emerge where Promise integration would help (repeated boilerplate, desire for Suspense-like boundaries), consider:
+
+1. **`Changes.createResource()`** — explicit resource primitive in chchchchanges
+2. **`[Await, ...]`** — special form in Brint for Promise handling
+
+These can be added later without breaking the core model. The async-outside approach remains valid even if these are added — they're just sugar for common patterns.
+
+---
+
 ## Potential Pitfalls
 
 ### 1. Proxy Limitations
@@ -855,11 +1049,11 @@ The current chchchchanges design uses a single change source for arrays. See **P
 - Cross-domain data sharing could be problematic
 - Global domain usage might cause unexpected interactions
 
-### 6. Async Challenges
-The docs explicitly state "The function must be synchronous - async functions are not supported." This means:
-- Cannot track dependencies across await boundaries
-- Data fetching patterns will need special handling
-- May not integrate well with async rendering strategies
+### 6. Async Challenges — Reframed
+The docs state "The function must be synchronous - async functions are not supported." This is about dependency tracking during function execution, not a fundamental limitation. See **Deep Dive: Async and the Rendering Layer** below for a full discussion. Key points:
+- Async can live outside the rendering layer — processes update the model, Brint renders it
+- Promises could potentially integrate with chchchchanges directly
+- This is a valid architectural choice, not "old thinking"
 
 ### 7. RenderSpec Ambiguities — Addressed
 See **Deep Dive: RenderSpec Syntax Clarification**. The solution:
@@ -908,7 +1102,7 @@ Built with TypeScript from the start, which should provide good type inference f
 1. ~~How will list reconciliation work? Will there be keyed updates?~~ — Addressed in **Deep Dive: List Reconciliation**
 2. ~~What's the component lifecycle model?~~ — Addressed in **Deep Dive: Component Lifecycle**
 3. How will effects (side effects in response to state changes) be handled? — Partially addressed; may be handled automatically via fine-grained reactivity
-4. What's the strategy for async data fetching?
+4. ~~What's the strategy for async data fetching?~~ — Addressed in **Deep Dive: Async and the Rendering Layer**; async-outside is recommended, with possible Promise integration via `createResource()` or `[Await, ...]`
 5. Will there be dev tools for debugging reactivity?
 6. ~~How will refs (direct DOM access) work?~~ — Addressed via `ctx.getElement()` in lifecycle deep dive
 7. ~~What about portals, suspense, error boundaries?~~ — Syntax sketched in **Deep Dive: RenderSpec Syntax Clarification** (symbol-based special forms); implementation details TBD
