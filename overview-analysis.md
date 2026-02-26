@@ -634,6 +634,200 @@ Async mount handlers are useful for data fetching. The cleanup function pattern 
 
 ---
 
+## Deep Dive: RenderSpec Syntax Clarification
+
+The original overview leaves some ambiguity around special cases like fragments (multiple children without a wrapper) and the new `ListRenderSpec`. This section proposes a clear syntax.
+
+### The Ambiguity Problem
+
+The `[tag, attrs, children]` array model works well for elements and components:
+
+```javascript
+["div", { class: "foo" }, [...]]   // Element - first item is string
+[MyComponent, { prop: 1 }]          // Component - first item is function
+```
+
+But what about:
+
+```javascript
+["hello", "world"]    // Fragment of two text nodes? Or element with tag "hello"?
+[child1, child2]      // Fragment? Array of children? Something else?
+```
+
+The first element's type signals the interpretation, but fragments break this — their first child could be anything.
+
+### Solution: null for Fragments, Symbols for Special Forms
+
+**Interpretation rules based on first element:**
+
+| First Element | Interpretation |
+|---------------|----------------|
+| `string` | ElementRenderSpec — the string is the tag name |
+| `function` | ComponentRenderSpec — the function is the component |
+| `null` | Fragment — remaining elements are children with no wrapper |
+| `symbol` | Special form — e.g., `List` for keyed list rendering |
+
+**Fragment syntax:**
+
+```javascript
+// null tag = fragment (no wrapper element)
+// Attrs are optional, so this is clean:
+[null,
+  ["div", {}, "first"],
+  ["div", {}, "second"]
+]
+
+// Component returning multiple elements
+function MyComponent(props, ctx) {
+  return [null,
+    ["header", {}, "Header"],
+    ["main", {}, props.content],
+    ["footer", {}, "Footer"]
+  ]
+}
+```
+
+Using `null` is intuitive: "no element here, just these children." It's also consistent with `NullRenderSpec` (a plain `null`) meaning "render nothing."
+
+**Special forms via symbols:**
+
+```javascript
+import { List } from 'brint'
+
+// List with keyed reconciliation and operation-based updates
+[List, { each: () => state.items, key: item => item.id },
+  item => ["li", {}, item.text]
+]
+```
+
+Symbols are ideal for special forms because:
+- They can't collide with string tags or component functions
+- They're easily extensible (add new symbols for new forms)
+- They're explicit — you know it's special because you imported it
+
+### Helper Functions
+
+For ergonomics, Brint can provide helper functions that return the appropriate RenderSpec:
+
+```javascript
+import { fragment, list } from 'brint'
+
+// fragment(...children) returns [null, ...children]
+fragment(
+  ["div", {}, "first"],
+  ["div", {}, "second"]
+)
+
+// list(config, renderFn) returns [List, config, renderFn]
+list(
+  { each: () => state.items, key: item => item.id },
+  item => ["li", {}, item.text]
+)
+```
+
+These are just sugar — they return standard RenderSpec arrays:
+
+```javascript
+function fragment(...children) {
+  return [null, ...children]
+}
+
+function list(config, renderFn) {
+  return [List, config, renderFn]
+}
+```
+
+### Complete RenderSpec Grammar
+
+With these clarifications, the full grammar becomes:
+
+```
+RenderSpec =
+  | string                                    // TextRenderSpec
+  | null                                      // NullRenderSpec (render nothing)
+  | () => RenderSpec                          // FunctionRenderSpec (reactive)
+  | [string, attrs?, ...children]             // ElementRenderSpec
+  | [function, props?]                        // ComponentRenderSpec
+  | [null, ...children]                       // Fragment
+  | [Symbol, config, ...args]                 // Special form (List, etc.)
+
+attrs = object
+props = object
+children = RenderSpec[]
+config = object (specific to each special form)
+```
+
+### Examples
+
+```javascript
+// Text
+"Hello, world"
+
+// Nothing
+null
+
+// Element with children
+["div", { class: "container" },
+  ["h1", {}, "Title"],
+  ["p", {}, "Content"]
+]
+
+// Element with no attrs (attrs optional)
+["br"]
+["div", ["span", {}, "child"]]
+
+// Component
+[UserProfile, { userId: 123 }]
+
+// Reactive text
+() => `Count: ${state.count}`
+
+// Reactive element
+() => state.isLoggedIn
+  ? [Dashboard, { user: state.user }]
+  : [LoginForm, {}]
+
+// Fragment
+[null,
+  ["li", {}, "Item 1"],
+  ["li", {}, "Item 2"]
+]
+
+// Keyed list
+[List, { each: () => state.todos, key: t => t.id },
+  todo => ["li", { class: () => todo.done ? "done" : "" },
+    todo.text
+  ]
+]
+```
+
+### Future Special Forms
+
+The symbol-based approach allows adding new special forms as needed:
+
+```javascript
+import { List, Portal, Suspense, ErrorBoundary } from 'brint'
+
+// Portal - render children into a different DOM node
+[Portal, { target: document.body },
+  ["div", { class: "modal" }, "Modal content"]
+]
+
+// Suspense - show fallback while async content loads
+[Suspense, { fallback: ["div", {}, "Loading..."] },
+  [AsyncComponent, {}]
+]
+
+// ErrorBoundary - catch errors in children
+[ErrorBoundary, { fallback: err => ["div", {}, `Error: ${err.message}`] },
+  [RiskyComponent, {}]
+]
+```
+
+These are speculative, but the syntax accommodates them cleanly.
+
+---
+
 ## Potential Pitfalls
 
 ### 1. Proxy Limitations
@@ -667,12 +861,11 @@ The docs explicitly state "The function must be synchronous - async functions ar
 - Data fetching patterns will need special handling
 - May not integrate well with async rendering strategies
 
-### 7. RenderSpec Ambiguities
-The overview notes a TBD: "how to avoid confusing [ArrayRenderSpec] with child RenderSpecs?" This suggests the syntax could be ambiguous:
-```
-["div", {}, [child1, child2]]  // Element with children?
-[child1, child2]              // Array of specs?
-```
+### 7. RenderSpec Ambiguities — Addressed
+See **Deep Dive: RenderSpec Syntax Clarification**. The solution:
+- First element determines interpretation: `string` → element, `function` → component, `null` → fragment, `symbol` → special form
+- Fragments use `[null, child1, child2]` — unambiguous and intuitive
+- Special forms like `List` use symbols to avoid collision with tags or components
 
 ### 8. Attribute/Property Confusion
 The docs mention attributes are set via object properties, but web components and some HTML elements distinguish between attributes and properties. The current design may not handle this well.
@@ -718,7 +911,7 @@ Built with TypeScript from the start, which should provide good type inference f
 4. What's the strategy for async data fetching?
 5. Will there be dev tools for debugging reactivity?
 6. ~~How will refs (direct DOM access) work?~~ — Addressed via `ctx.getElement()` in lifecycle deep dive
-7. What about portals, suspense, error boundaries?
+7. ~~What about portals, suspense, error boundaries?~~ — Syntax sketched in **Deep Dive: RenderSpec Syntax Clarification** (symbol-based special forms); implementation details TBD
 
 ---
 
