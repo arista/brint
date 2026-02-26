@@ -1227,3 +1227,100 @@ Built with TypeScript from the start, which should provide good type inference f
 5. **Build dev tools** - reactivity debugging is essential
 6. **Document the mental model** - developers need to understand when things re-render
 7. **Consider compilation** - runtime Proxy overhead may become a concern at scale
+
+---
+
+## Long-Term Viability and Practical Considerations
+
+### Is There an Underserved Niche?
+
+There's a gap in the current landscape between:
+
+- **Vanilla JS** — Too low-level for complex reactive UIs; lots of manual DOM manipulation
+- **Full frameworks (React/Vue/Svelte)** — Lots of concepts, tooling requirements, ecosystem dependencies, ongoing churn
+
+Some developers want enough abstraction to be productive, but simple enough to fully understand. This is similar to the appeal of htmx, Alpine.js, or Preact — "I can read the whole source and understand it" is genuinely valuable.
+
+Brint could serve developers who want:
+- Reactive UI without a virtual DOM
+- Minimal conceptual overhead
+- No build step required (or minimal)
+- Full understanding of the framework internals
+- Close-to-the-platform primitives
+
+### Framework Longevity
+
+A reasonable concern: will today's frameworks exist in 10 years?
+
+- React is 12+ years old and dominant, but the churn is constant (classes → hooks → server components → ???)
+- jQuery was dominant for 10+ years and is now largely legacy
+- The only truly stable thing is the web platform itself
+
+**What ages well:**
+- HTML, CSS, vanilla JavaScript
+- Standard APIs (DOM, Fetch, Proxies, Web Components)
+- Simple, transparent abstractions
+
+**What ages poorly:**
+- Heavy abstractions that fight the platform
+- Complex build tooling with many dependencies
+- "Magic" that hides what's actually happening
+
+Brint's approach — Proxies (standard), DOM APIs (standard), TypeScript (stable), minimal dependencies — positions it closer to the "ages well" side. Even if Brint itself doesn't survive, the concepts and patterns transfer.
+
+### Risk Assessment for Personal Projects
+
+| Risk | Mitigation |
+|------|------------|
+| No ecosystem (routing, forms, etc.) | Build what you need, skip what you don't |
+| No community support | You understand the whole codebase yourself |
+| Could have edge-case bugs | Established frameworks have these too, just hidden |
+| Framework could be abandoned | It's your framework — you can maintain it |
+| No job market relevance | Irrelevant for personal projects |
+
+For personal sites, these tradeoffs are often acceptable or even desirable. The learning and control are part of the point.
+
+For team projects or startups: different calculus. Ecosystem, hiring, and community support matter more.
+
+### AI-Assisted Development
+
+A practical question: will AI coding assistants (like Claude Code) be able to help with a non-mainstream framework?
+
+**Yes, and here's why:**
+
+AI helpfulness doesn't depend on framework popularity. Claude understands:
+- JavaScript/TypeScript deeply
+- DOM APIs (standard, well-documented)
+- Reactive programming concepts (from Vue, MobX, Solid, etc.)
+- Proxy-based reactivity (the pattern, not just specific implementations)
+
+The RenderSpec format is simple enough to understand from examples. Claude doesn't need specific training data on Brint — the concepts are familiar from other reactive systems.
+
+**What AI can help with:**
+
+- Writing components in RenderSpec format (it's just arrays and functions)
+- Debugging reactivity issues (the concepts transfer from other systems)
+- Working with chchchchanges (standard TypeScript with Proxies)
+- DOM manipulation, event handling, CSS — all standard web development
+
+**What might be slightly harder:**
+
+- AI won't know Brint's specific APIs without seeing docs/code first (but you can provide context)
+- No Stack Overflow answers to reference (but AI reasons from principles, not just pattern matching)
+- Complex bugs in framework internals may need more guidance
+
+**A potential advantage:**
+
+AI might actually be *more* helpful with a simple, transparent framework than a complex one full of magic and gotchas. Debugging "here's my RenderSpec, here's what it should do, it's doing X instead" is more tractable than debugging "my useEffect is firing twice because of StrictMode concurrent rendering something something."
+
+Transparent code is debuggable code — by humans and AI alike.
+
+### Summary
+
+For personal projects with a long time horizon:
+
+1. **The niche is real** — not everyone wants a full framework
+2. **Platform proximity helps longevity** — Proxies and DOM APIs aren't going anywhere
+3. **Understanding beats dependency** — knowing your tools deeply is valuable
+4. **AI assistance works** — Claude can help with code that uses standard patterns, regardless of framework popularity
+5. **The risk is acceptable** — worst case, you learn a lot and the knowledge transfers
