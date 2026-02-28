@@ -10,6 +10,7 @@ RenderSpec =
     | TextRenderSpec
     | ElementRenderSpec
     | FunctionRenderSpec
+    | ComponentRenderSpec
     | FragmentRenderSpec
     | ListRenderSpec
 
@@ -26,17 +27,19 @@ ElementRenderSpec =
     ElementRenderSpecWithArgsWithChildren |
 
 ElementRenderSpecNoArgsNoChildren = [ElementName]
-ElementRenderSpecNoArgsWithChildren = [ElementName, ChildRenderSpecs]
+ElementRenderSpecNoArgsWithChildren = [ElementName, ElementChildRenderSpecs]
 ElementRenderSpecWithArgsNoChildren = [ElementName, ElementArgs]
-ElementRenderSpecWithArgsWithChildren = [ElementName, ElementArgs, ChildRenderSpecs]
+ElementRenderSpecWithArgsWithChildren = [ElementName, ElementArgs, ElementChildRenderSpecs]
 
 ElementName = string
 
-ElementArgs =
+ElementChildRenderSpecs = Array<RenderSpec> | RenderSpec
+
+ElementArgs = combined Record type with these possible elements:
   NormalElementArgs
-  | OnElementArgs
-  | PropertiesElementArgs
-  | XmlnsElementArgs
+  OnElementArgs
+  PropertiesElementArgs
+  XmlnsElementArgs
 
 NormalElementArgs = Record<any string except ["on", "properties", "xmlns"], ElementValue>
 
@@ -48,14 +51,16 @@ DomEventHandler =
   FunctionDomEventHandler
   | OptionsDomEventHandler
   
-FunctionDomEventHandler = {whatever the type signature is for the listener passed to addEventListener}
+FunctionDomEventHandler = FIXME - whatever the type signature is for the listener passed to addEventListener
 
 OptionsDomEventHandler = {
   listener: FunctionDomEventHandler
-  options: {whatever the type signature is for the options passed to addEventListener}
+  options: FIXME - whatever the type signature is for the options passed to addEventListener
 }
 
-PropertiesElementArgs = Record<string|Symbol, PropertiesElementArgsItem>
+PropertiesElementArgs = Record<"properties", PropertiesElementArgsValue>
+
+PropertiesElementArgsValue = Record<string|Symbol, PropertiesElementArgsItem>
 
 PropertiesElementArgsItem =
   FunctionPropertiesElementArgsItem
@@ -120,27 +125,49 @@ ResolvedObjectElementValueItem =
 
 FunctionElementValue = ()=>ResolvedElementValue
 
-ChildRenderSpecs = Array<RenderSpec> | RenderSpec
-
-
 ComponentRenderSpec = ComponentRenderSpecWithArgs | ComponentRenderSpecNoArgs
 
 ComponentRenderSpecWithArgs = [ComponentFunction ComponentArgs]
 ComponentRenderSpecNoArgs = [ComponentFunction]
 
-ComponentFunction = (args: ResolvedComponentArgs, ctx: RenderSpecCtx) => RenderSpec
+ComponentFunction = (props: ResolvedComponentArgs, ctx: RenderSpecCtx) => RenderSpec
 
-ComponentArgs = ???
+ComponentArgs = combined Record type with these possible elements:
+  NormalComponentArgs
+  | OnComponentArgs
+
+NormalComponentArgs = Record<any string except "on", ComponentArg>
+
+ComponentArg =
+  any non-function value
+  | FunctionComponentArg
+
+FunctionComponentArg = ()=>any
+
+OnComponentArgs = Record<"on", OnComponentHandlers>
+
+OnComponentHandlers = Record<string, any>
 
 ResolvedComponentArgs = Record<string, any>
 
-FragmentRenderSpec = [null, RenderSpecArray]
+FragmentRenderSpec = [null (, RenderSpec)*]
 
-ListRenderSpec<T> = [ListSymbol, ListSourceFn<T>, ListItemFn<T>]
+ListRenderSpec<T> = [ListSymbol, ListItemsSpec<T>]
+
+ListItemsSpec = {
+  items: ListSource<T>
+  each: ListItemFn<T>
+}
+
+ListSource =
+  Array<T>
+  | ListSourceFn<T>
 
 ListSourceFn<T> = ()=>Array<T>
 
 ListItemFn<T> = (item:T) => RenderSpec
+
+ListSymbol = FIXME - a special Symbol exposed by the library
 
 RenderSpecCtx = {
   FIXME - define interface exposed to components
