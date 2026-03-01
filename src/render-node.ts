@@ -1,4 +1,42 @@
+import type { CachedFunction } from "chchchchanges"
 import type { RenderSpec } from "./index.js"
+
+/**
+ * Represents a reactive element value that may contain CachedFunctions.
+ * Used for attributes and styles that can have reactive nested values.
+ */
+export type ReactiveElementValue =
+  | null
+  | undefined
+  | string
+  | number
+  | boolean
+  | ReactiveElementValue[]
+  | CachedFunction<unknown>
+
+/**
+ * Stores a reactive attribute with its value and update function
+ */
+export interface RenderNodeAttribute {
+  value: ReactiveElementValue
+  update: () => void
+}
+
+/**
+ * Stores a reactive style with its value and update function
+ */
+export interface RenderNodeStyle {
+  value: ReactiveElementValue
+  update: () => void
+}
+
+/**
+ * Stores a reactive property with its CachedFunction
+ */
+export interface RenderNodeProperty {
+  cachedFunction: CachedFunction<unknown>
+  update: () => void
+}
 
 /**
  * RenderNode represents a live node in the render tree.
@@ -26,8 +64,27 @@ export class RenderNode {
   /** Child RenderNodes */
   children: RenderNode[] = []
 
+  /** Reactive attributes (only populated if there are reactive values) */
+  reactiveAttributes: Map<string, RenderNodeAttribute> | null = null
+
+  /** Reactive styles (only populated if there are reactive values) */
+  reactiveStyles: Map<string, RenderNodeStyle> | null = null
+
+  /** Reactive properties (only populated if there are reactive values) */
+  reactiveProperties: Map<string | symbol, RenderNodeProperty> | null = null
+
+  /** All CachedFunctions to clean up when this node is removed */
+  private cleanupFunctions: Array<CachedFunction<unknown>> = []
+
   constructor(spec: RenderSpec) {
     this.spec = spec
+  }
+
+  /**
+   * Register a CachedFunction for cleanup when this node is removed
+   */
+  addCleanup(cf: CachedFunction<unknown>): void {
+    this.cleanupFunctions.push(cf)
   }
 
   /**
@@ -73,6 +130,15 @@ export class RenderNode {
     if (this.node && this.node.parentNode) {
       this.node.parentNode.removeChild(this.node)
     }
+
+    // Clean up all CachedFunctions
+    for (const cf of this.cleanupFunctions) {
+      cf.remove()
+    }
+    this.cleanupFunctions = []
+    this.reactiveAttributes = null
+    this.reactiveStyles = null
+    this.reactiveProperties = null
 
     // Recursively remove children (copy array since remove() modifies it)
     const childrenToRemove = [...this.children]

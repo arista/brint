@@ -154,7 +154,7 @@ export interface RenderHandle {
  * Create a new Brint instance
  */
 export function create(config: BrintConfig): Brint {
-  const { changeDomain: _changeDomain } = config
+  const { changeDomain } = config
 
   return {
     render(spec: RenderSpec, element: Element): RenderHandle {
@@ -162,8 +162,8 @@ export function create(config: BrintConfig): Brint {
       const rootRenderNode = new RenderNode(null)
       rootRenderNode.node = element
 
-      // Render the spec as a child of the root
-      const childRenderNode = renderSpec(spec, rootRenderNode, element, null)
+      // Render the spec as a child of the root, passing the ChangeDomain for reactivity
+      const childRenderNode = renderSpec(spec, rootRenderNode, element, null, changeDomain)
 
       return {
         unmount() {

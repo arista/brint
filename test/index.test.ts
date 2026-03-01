@@ -700,5 +700,236 @@ describe("brint", () => {
         assert.equal(container.childNodes.length, 0)
       })
     })
+
+    describe("reactive attributes", () => {
+      it("should update attribute when reactive value changes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ className: "initial" })
+
+        brint.render(["div", { class: () => state.className }], container)
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("class"), "initial")
+
+        // Update the state
+        state.className = "updated"
+
+        // The attribute should be updated
+        assert.equal(div.getAttribute("class"), "updated")
+      })
+
+      it("should update attribute with reactive array value", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ active: false })
+
+        brint.render(
+          ["div", { class: ["base", () => (state.active ? "active" : null)] }],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("class"), "base")
+
+        // Update the state
+        state.active = true
+
+        // The attribute should include "active" now
+        assert.equal(div.getAttribute("class"), "base active")
+      })
+
+      it("should remove attribute when reactive value becomes null", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ title: "hello" as string | null })
+
+        brint.render(["div", { title: () => state.title }], container)
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("title"), "hello")
+
+        // Set to null
+        state.title = null
+
+        // The attribute should be removed
+        assert.equal(div.hasAttribute("title"), false)
+      })
+    })
+
+    describe("reactive styles", () => {
+      it("should update style when reactive value changes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ color: "red" })
+
+        brint.render(["div", { style: { color: () => state.color } }], container)
+
+        const div = container.firstChild as HTMLElement
+        assert.equal(div.style.color, "red")
+
+        // Update the state
+        state.color = "blue"
+
+        // The style should be updated
+        assert.equal(div.style.color, "blue")
+      })
+
+      it("should remove style when reactive value becomes null", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ display: "block" as string | null })
+
+        brint.render(["div", { style: { display: () => state.display } }], container)
+
+        const div = container.firstChild as HTMLElement
+        assert.equal(div.style.display, "block")
+
+        // Set to null
+        state.display = null
+
+        // The style should be removed
+        assert.equal(div.style.display, "")
+      })
+    })
+
+    describe("reactive properties", () => {
+      it("should update property when reactive value changes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ value: "initial" })
+
+        brint.render(["input", { properties: { value: () => state.value } }], container)
+
+        const input = container.firstChild as HTMLInputElement
+        assert.equal(input.value, "initial")
+
+        // Update the state
+        state.value = "updated"
+
+        // The property should be updated
+        assert.equal(input.value, "updated")
+      })
+
+      it("should handle non-reactive properties alongside reactive ones", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ reactive: "reactive-value" })
+
+        brint.render(
+          [
+            "input",
+            {
+              properties: {
+                value: () => state.reactive,
+                placeholder: "static-value",
+              },
+            },
+          ],
+          container,
+        )
+
+        const input = container.firstChild as HTMLInputElement
+        assert.equal(input.value, "reactive-value")
+        assert.equal(input.placeholder, "static-value")
+
+        // Update the reactive property
+        state.reactive = "new-value"
+
+        assert.equal(input.value, "new-value")
+        assert.equal(input.placeholder, "static-value")
+      })
+    })
+
+    describe("cleanup", () => {
+      it("should cleanup reactive values when unmounting", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ value: "test" })
+        let callCount = 0
+
+        const handle = brint.render(
+          [
+            "div",
+            {
+              class: () => {
+                callCount++
+                return state.value
+              },
+            },
+          ],
+          container,
+        )
+
+        // Initial render calls the function
+        assert.equal(callCount, 1)
+
+        // Update should call again
+        state.value = "updated"
+        assert.equal(callCount, 2)
+
+        // Unmount
+        handle.unmount()
+
+        // After unmount, updates should NOT call the function
+        state.value = "after-unmount"
+        assert.equal(callCount, 2) // Still 2, not 3
+      })
+
+      it("should cleanup nested reactive values in arrays", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ a: "a", b: "b" })
+        let callCountA = 0
+        let callCountB = 0
+
+        const handle = brint.render(
+          [
+            "div",
+            {
+              class: [
+                () => {
+                  callCountA++
+                  return state.a
+                },
+                () => {
+                  callCountB++
+                  return state.b
+                },
+              ],
+            },
+          ],
+          container,
+        )
+
+        // Initial render
+        assert.equal(callCountA, 1)
+        assert.equal(callCountB, 1)
+
+        // Update should call both
+        state.a = "aa"
+        state.b = "bb"
+        assert.equal(callCountA, 2)
+        assert.equal(callCountB, 2)
+
+        // Unmount
+        handle.unmount()
+
+        // After unmount, updates should NOT call functions
+        state.a = "aaa"
+        state.b = "bbb"
+        assert.equal(callCountA, 2)
+        assert.equal(callCountB, 2)
+      })
+    })
   })
 })

@@ -1,3 +1,4 @@
+import type { ChangeDomain, CachedFunction } from "chchchchanges"
 import type {
   RenderSpec,
   ElementRenderSpec,
@@ -5,7 +6,15 @@ import type {
   ElementChildRenderSpecs,
   FragmentRenderSpec,
 } from "./index.js"
-import { RenderNode } from "./render-node.js"
+import { RenderNode, type ReactiveElementValue } from "./render-node.js"
+
+/**
+ * Result of converting an ElementValue to a ReactiveElementValue
+ */
+interface ReactiveElementResult {
+  value: ReactiveElementValue
+  isReactive: boolean
+}
 
 /**
  * Check if a value is a NullRenderSpec
@@ -82,6 +91,70 @@ function isRenderSpecArray(value: unknown): value is RenderSpec[] {
 }
 
 /**
+ * Convert an ElementValue to a ReactiveElementValue.
+ * Functions are wrapped in CachedFunctions that will trigger onChange when invalidated.
+ *
+ * @param value The ElementValue to convert
+ * @param domain The ChangeDomain for creating CachedFunctions
+ * @param onChange Callback to invoke when any reactive value changes
+ * @param renderNode The RenderNode to register cleanup functions with
+ */
+function elementValueToReactiveElementValue(
+  value: unknown,
+  domain: ChangeDomain,
+  onChange: () => void,
+  renderNode: RenderNode,
+): ReactiveElementResult {
+  // Primitive values are not reactive
+  if (value === null || value === undefined) {
+    return { value, isReactive: false }
+  }
+  if (typeof value === "boolean" || typeof value === "string" || typeof value === "number") {
+    return { value, isReactive: false }
+  }
+
+  // Functions are wrapped in CachedFunctions
+  if (typeof value === "function") {
+    const cf = domain.createCachedFunction(value as () => unknown)
+    cf.addListener(onChange)
+    renderNode.addCleanup(cf)
+    return { value: cf, isReactive: true }
+  }
+
+  // Arrays are processed recursively
+  if (Array.isArray(value)) {
+    let hasReactive = false
+    const result: ReactiveElementValue[] = []
+
+    for (const item of value) {
+      const converted = elementValueToReactiveElementValue(item, domain, onChange, renderNode)
+      result.push(converted.value)
+      if (converted.isReactive) {
+        hasReactive = true
+      }
+    }
+
+    return { value: result, isReactive: hasReactive }
+  }
+
+  // Unknown types are treated as non-reactive null
+  return { value: null, isReactive: false }
+}
+
+/**
+ * Check if a value is a CachedFunction
+ */
+function isCachedFunction(value: unknown): value is CachedFunction<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "call" in value &&
+    "remove" in value &&
+    typeof (value as CachedFunction<unknown>).call === "function"
+  )
+}
+
+/**
  * Parse an ElementRenderSpec into its components
  */
 function parseElementRenderSpec(spec: ElementRenderSpec): {
@@ -110,13 +183,14 @@ function parseElementRenderSpec(spec: ElementRenderSpec): {
 }
 
 /**
- * Render an array ElementValue to a flattened, space-joined string.
- * Skips null, undefined, and booleans. For Phase 3, we skip functions.
+ * Render a ReactiveElementValue array to a flattened, space-joined string.
+ * Evaluates CachedFunctions and skips null, undefined, and booleans.
  */
-function renderArrayElementValue(value: unknown[]): string | null {
+function renderReactiveArrayValue(value: ReactiveElementValue[]): string | null {
   const rendered: string[] = []
 
-  function processItem(item: unknown): void {
+  function processItem(item: ReactiveElementValue): void {
+    // Skip null, undefined, and booleans (both true and false in arrays)
     if (item === null || item === undefined || typeof item === "boolean") {
       return
     }
@@ -134,7 +208,12 @@ function renderArrayElementValue(value: unknown[]): string | null {
       }
       return
     }
-    // Skip functions for now (Phase 5 will handle reactive functions)
+    // CachedFunction: evaluate and process result
+    if (isCachedFunction(item)) {
+      const result = item.call()
+      processItem(result as ReactiveElementValue)
+      return
+    }
   }
 
   for (const item of value) {
@@ -148,10 +227,10 @@ function renderArrayElementValue(value: unknown[]): string | null {
 }
 
 /**
- * Render an ElementValue (primitive or array) to a string for attribute setting.
- * For Phase 3, we handle primitive values and arrays (no reactive functions).
+ * Render a ReactiveElementValue to a string, true, or null for attribute/style setting.
+ * Evaluates CachedFunctions when encountered.
  */
-function renderElementValue(value: unknown): string | true | null {
+function renderReactiveElementValue(value: ReactiveElementValue): string | true | null {
   if (value === null || value === undefined) {
     return null
   }
@@ -165,45 +244,110 @@ function renderElementValue(value: unknown): string | true | null {
     return String(value)
   }
   if (Array.isArray(value)) {
-    return renderArrayElementValue(value)
+    return renderReactiveArrayValue(value)
   }
-  // Skip functions for now (Phase 5)
+  // CachedFunction: evaluate and render the result
+  if (isCachedFunction(value)) {
+    const result = value.call()
+    return renderReactiveElementValue(result as ReactiveElementValue)
+  }
   return null
 }
 
 /**
- * Apply static attributes to a DOM element.
- * Handles normal attributes, arrays (space-joined), but skips functions for now.
+ * Apply a single attribute value to an element
  */
-function applyStaticAttributes(element: Element, args: ElementArgs): void {
+function applyAttributeValue(element: Element, key: string, value: ReactiveElementValue): void {
+  const rendered = renderReactiveElementValue(value)
+
+  if (rendered === null) {
+    element.removeAttribute(key)
+  } else if (rendered === true) {
+    element.setAttribute(key, key)
+  } else {
+    element.setAttribute(key, rendered)
+  }
+}
+
+/**
+ * Apply attributes to a DOM element, supporting reactive values.
+ */
+function applyAttributes(
+  element: Element,
+  args: ElementArgs,
+  domain: ChangeDomain,
+  renderNode: RenderNode,
+): void {
   for (const [key, value] of Object.entries(args)) {
     // Skip special keys - handled separately
     if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
       continue
     }
 
-    // Skip functions for now (Phase 5 will handle reactive functions)
-    if (typeof value === "function") {
-      continue
+    // Convert to reactive value
+    const update = () => {
+      const reactiveAttr = renderNode.reactiveAttributes?.get(key)
+      if (reactiveAttr) {
+        applyAttributeValue(element, key, reactiveAttr.value)
+      }
     }
 
-    const rendered = renderElementValue(value)
+    const { value: reactiveValue, isReactive } = elementValueToReactiveElementValue(
+      value,
+      domain,
+      update,
+      renderNode,
+    )
 
-    if (rendered === null) {
-      element.removeAttribute(key)
-    } else if (rendered === true) {
-      element.setAttribute(key, key)
-    } else {
-      element.setAttribute(key, rendered)
+    // Apply the initial value
+    applyAttributeValue(element, key, reactiveValue)
+
+    // If reactive, store for updates
+    if (isReactive) {
+      if (!renderNode.reactiveAttributes) {
+        renderNode.reactiveAttributes = new Map()
+      }
+      renderNode.reactiveAttributes.set(key, { value: reactiveValue, update })
     }
   }
 }
 
 /**
- * Apply static styles to a DOM element.
+ * Apply a single style value to an element
+ */
+function applyStyleValue(
+  elementWithStyle: Element & { style: CSSStyleDeclaration },
+  property: string,
+  value: ReactiveElementValue,
+): void {
+  const rendered = renderReactiveElementValue(value)
+
+  if (rendered === true) {
+    // Boolean true is not valid for style properties
+    console.error(`Invalid style value: true for property "${property}"`)
+    return
+  }
+
+  if (rendered === null) {
+    // Remove the style property
+    elementWithStyle.style.removeProperty(property)
+  } else {
+    // Set the style property
+    // Note: camelCase properties need to use bracket notation
+    ;(elementWithStyle.style as unknown as Record<string, string>)[property] = rendered
+  }
+}
+
+/**
+ * Apply styles to a DOM element, supporting reactive values.
  * Style properties use camelCase (matching DOM API).
  */
-function applyStaticStyles(element: Element, styles: Record<string, unknown>): void {
+function applyStyles(
+  element: Element,
+  styles: Record<string, unknown>,
+  domain: ChangeDomain,
+  renderNode: RenderNode,
+): void {
   // Check if element has a style property (HTMLElement or SVGElement)
   const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
   if (!elementWithStyle.style) {
@@ -211,27 +355,108 @@ function applyStaticStyles(element: Element, styles: Record<string, unknown>): v
   }
 
   for (const [property, value] of Object.entries(styles)) {
-    // Skip functions for now (Phase 5 will handle reactive functions)
+    // Convert to reactive value
+    const update = () => {
+      const reactiveStyle = renderNode.reactiveStyles?.get(property)
+      if (reactiveStyle) {
+        applyStyleValue(
+          elementWithStyle as Element & { style: CSSStyleDeclaration },
+          property,
+          reactiveStyle.value,
+        )
+      }
+    }
+
+    const { value: reactiveValue, isReactive } = elementValueToReactiveElementValue(
+      value,
+      domain,
+      update,
+      renderNode,
+    )
+
+    // Apply the initial value
+    applyStyleValue(
+      elementWithStyle as Element & { style: CSSStyleDeclaration },
+      property,
+      reactiveValue,
+    )
+
+    // If reactive, store for updates
+    if (isReactive) {
+      if (!renderNode.reactiveStyles) {
+        renderNode.reactiveStyles = new Map()
+      }
+      renderNode.reactiveStyles.set(property, { value: reactiveValue, update })
+    }
+  }
+}
+
+/**
+ * Apply attributes to a DOM element (static, non-reactive version).
+ * Used when no ChangeDomain is provided.
+ */
+function applyAttributesStatic(element: Element, args: ElementArgs): void {
+  for (const [key, value] of Object.entries(args)) {
+    // Skip special keys - handled separately
+    if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
+      continue
+    }
+
+    // Skip functions - they require a ChangeDomain for reactivity
     if (typeof value === "function") {
       continue
     }
 
-    const rendered = renderElementValue(value)
+    applyAttributeValue(element, key, value as ReactiveElementValue)
+  }
+}
 
-    if (rendered === true) {
-      // Boolean true is not valid for style properties
-      console.error(`Invalid style value: true for property "${property}"`)
+/**
+ * Apply styles to a DOM element (static, non-reactive version).
+ * Used when no ChangeDomain is provided.
+ */
+function applyStylesStatic(element: Element, styles: Record<string, unknown>): void {
+  const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
+  if (!elementWithStyle.style) {
+    return
+  }
+
+  for (const [property, value] of Object.entries(styles)) {
+    // Skip functions - they require a ChangeDomain for reactivity
+    if (typeof value === "function") {
       continue
     }
 
-    if (rendered === null) {
-      // Remove the style property
-      elementWithStyle.style!.removeProperty(property)
-    } else {
-      // Set the style property
-      // Note: camelCase properties need to use bracket notation
-      ;(elementWithStyle.style as unknown as Record<string, string>)[property] = rendered
+    applyStyleValue(
+      elementWithStyle as Element & { style: CSSStyleDeclaration },
+      property,
+      value as ReactiveElementValue,
+    )
+  }
+}
+
+/**
+ * Apply properties to a DOM element (static, non-reactive version).
+ * Used when no ChangeDomain is provided.
+ */
+function applyPropertiesStatic(element: Element, properties: Record<string | symbol, unknown>): void {
+  for (const [key, value] of Object.entries(properties)) {
+    // Skip functions - they require a ChangeDomain for reactivity
+    if (typeof value === "function") {
+      continue
     }
+    applyPropertyValue(element, key, value)
+  }
+
+  // Handle symbol keys
+  const symbolKeys = Object.getOwnPropertySymbols(properties)
+  for (const key of symbolKeys) {
+    const value = properties[key]
+    // Skip functions
+    if (typeof value === "function") {
+      continue
+    }
+    applyPropertyValue(element, key, value)
   }
 }
 
@@ -258,20 +483,55 @@ function applyEventListeners(element: Element, handlers: Record<string, unknown>
 }
 
 /**
- * Apply properties directly to a DOM element.
- * For Phase 3, we skip function values (Phase 5 will handle reactive properties).
+ * Apply a single property to an element
  */
-function applyStaticProperties(
+function applyPropertyValue(
+  element: Element,
+  key: string | symbol,
+  value: unknown,
+): void {
+  ;(element as unknown as Record<string | symbol, unknown>)[key] = value
+}
+
+/**
+ * Apply properties directly to a DOM element, supporting reactive values.
+ * Function values are wrapped in CachedFunctions.
+ */
+function applyProperties(
   element: Element,
   properties: Record<string | symbol, unknown>,
+  domain: ChangeDomain,
+  renderNode: RenderNode,
 ): void {
+  // Process string keys
   for (const [key, value] of Object.entries(properties)) {
-    // Skip functions for now (Phase 5 will wrap in CachedFunction)
     if (typeof value === "function") {
-      continue
-    }
+      // Wrap function in CachedFunction
+      const cf = domain.createCachedFunction(value as () => unknown)
+      const update = () => {
+        const result = cf.call()
+        applyPropertyValue(element, key, result)
+      }
 
-    ;(element as unknown as Record<string, unknown>)[key] = value
+      // Register for cleanup
+      renderNode.addCleanup(cf)
+
+      // Add listener for updates
+      cf.addListener(update)
+
+      // Apply initial value
+      const initialValue = cf.call()
+      applyPropertyValue(element, key, initialValue)
+
+      // Store for tracking
+      if (!renderNode.reactiveProperties) {
+        renderNode.reactiveProperties = new Map()
+      }
+      renderNode.reactiveProperties.set(key, { cachedFunction: cf, update })
+    } else {
+      // Static value - apply directly
+      applyPropertyValue(element, key, value)
+    }
   }
 
   // Handle symbol keys
@@ -279,12 +539,33 @@ function applyStaticProperties(
   for (const key of symbolKeys) {
     const value = properties[key]
 
-    // Skip functions for now (Phase 5)
     if (typeof value === "function") {
-      continue
-    }
+      // Wrap function in CachedFunction
+      const cf = domain.createCachedFunction(value as () => unknown)
+      const update = () => {
+        const result = cf.call()
+        applyPropertyValue(element, key, result)
+      }
 
-    ;(element as unknown as Record<symbol, unknown>)[key] = value
+      // Register for cleanup
+      renderNode.addCleanup(cf)
+
+      // Add listener for updates
+      cf.addListener(update)
+
+      // Apply initial value
+      const initialValue = cf.call()
+      applyPropertyValue(element, key, initialValue)
+
+      // Store for tracking
+      if (!renderNode.reactiveProperties) {
+        renderNode.reactiveProperties = new Map()
+      }
+      renderNode.reactiveProperties.set(key, { cachedFunction: cf, update })
+    } else {
+      // Static value - apply directly
+      applyPropertyValue(element, key, value)
+    }
   }
 }
 
@@ -295,12 +576,14 @@ function applyStaticProperties(
  * @param parentNode Optional parent RenderNode for tree structure
  * @param parentDomNode Optional parent DOM node for insertion
  * @param xmlns The inherited XML namespace
+ * @param domain The ChangeDomain for reactive values
  */
 export function render(
   spec: RenderSpec,
   parentNode: RenderNode | null = null,
   parentDomNode: Node | null = null,
   xmlns: string | null = null,
+  domain: ChangeDomain | null = null,
 ): RenderNode {
   const renderNode = new RenderNode(spec)
   renderNode.xmlns = xmlns
@@ -348,23 +631,36 @@ export function render(
 
     renderNode.node = element
 
-    // Apply static attributes
+    // Apply attributes, styles, event listeners, and properties
     if (args) {
-      applyStaticAttributes(element, args)
+      if (domain) {
+        applyAttributes(element, args, domain, renderNode)
+      } else {
+        // Fallback for non-reactive rendering (no domain provided)
+        applyAttributesStatic(element, args)
+      }
 
       // Apply styles
       if (args.style) {
-        applyStaticStyles(element, args.style)
+        if (domain) {
+          applyStyles(element, args.style, domain, renderNode)
+        } else {
+          applyStylesStatic(element, args.style)
+        }
       }
 
-      // Apply event listeners
+      // Apply event listeners (never reactive)
       if (args.on) {
         applyEventListeners(element, args.on)
       }
 
       // Apply properties
       if (args.properties) {
-        applyStaticProperties(element, args.properties)
+        if (domain) {
+          applyProperties(element, args.properties, domain, renderNode)
+        } else {
+          applyPropertiesStatic(element, args.properties)
+        }
       }
     }
 
@@ -377,7 +673,7 @@ export function render(
     if (children !== null) {
       const childSpecs: RenderSpec[] = isRenderSpecArray(children) ? children : [children]
       for (const childSpec of childSpecs) {
-        render(childSpec, renderNode, element, elementXmlns)
+        render(childSpec, renderNode, element, elementXmlns, domain)
       }
     }
 
@@ -394,7 +690,7 @@ export function render(
 
     // Render each child
     for (const childSpec of childSpecs) {
-      render(childSpec, renderNode, actualParentDomNode, xmlns)
+      render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
     }
 
     return renderNode

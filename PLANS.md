@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Implement Phase 5 on branch nsa-phase-5
+Implement Phase 6 on branch nsa-phase-6
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -38,13 +38,13 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~ElementChildRenderSpecs (array vs single)~~
 - ~~DOM insertion logic (finding correct insertion point when parent RenderNode has no DOM node)~~
 
-### Phase 5: Reactivity for Elements
+### Phase 5: Reactivity for Elements (COMPLETE)
 
-- CachedFunction integration with chchchchanges
-- `elementValueToReactiveElementValue`
-- `renderReactiveElementValue`
-- Reactive attributes, styles, properties
-- Cleanup (remove CachedFunctions on RenderNode removal)
+- ~~CachedFunction integration with chchchchanges~~
+- ~~`elementValueToReactiveElementValue`~~
+- ~~`renderReactiveElementValue`~~
+- ~~Reactive attributes, styles, properties~~
+- ~~Cleanup (remove CachedFunctions on RenderNode removal)~~
 
 ### Phase 6: FunctionRenderSpec
 
