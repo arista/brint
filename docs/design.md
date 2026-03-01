@@ -449,3 +449,28 @@ In all other cases, perform a full RenderNode removal and replace.
 ## DOM Interface
 
 TBD - is it worth defining our own interfaces for the DOM behaviors, at least in terms of creating nodes, adding children, etc.?  This would allow the library to operate against other DOM implementations, perhaps in test or SSR scenarios.
+
+## Top-Level API
+
+The top-level API looks like this:
+
+```
+create(config: BrintConfig): Brint
+
+BrintConfig {
+  // The ChangeDomain that handles change watching
+  changeDomain: ChangeDomain
+}
+
+Brint {
+  render(spec: RenderSpec, element: Element): RenderHandler
+
+  // Identifier for List RenderSpecs
+  List: Symbol
+}
+
+RenderHandle {
+  // Remove a previously-rendered item
+  unmount()
+}
+```

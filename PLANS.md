@@ -4,8 +4,12 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-I am starting on more detailed [technical design](./docs/design.md).  So far I've outlined the types for a RenderSpec.  I will start looking at the defining the behaviors of these RenderSpecs next, but for now I want to verify that the type definitions I have there are consistent, and that I'm not missing anything.
+Look at design.md.  overview.md and overview-analysis.md might also be helpful, but possibly outdated.  Assume that a RenderContext definition is TBD.
 
-Look at the README.md and docs/overview.md, and overview-analysis.md for background
+Right now the current focus is to get a basic implementation up and running, then flesh it out.  Can this implementation be phased into multiple steps of nice reviewable sizes?  Please add the initial implementation plan to this document in front of TODO.
 
 ## TODO
+
+* Define RenderContext and component lifecycle
+* Define Error handling
+* Define external Types
