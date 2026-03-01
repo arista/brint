@@ -17,26 +17,29 @@ This is fundamentally different from React's approach but shares similarities wi
 ## Comparison to React
 
 ### React's Model
+
 - **Virtual DOM diffing** - React re-runs component functions on state changes, produces a new virtual DOM tree, diffs it against the previous one, and patches the real DOM
 - **Explicit state management** - Uses `useState`, `useReducer`, etc. to declare reactive state
 - **Top-down re-rendering** - When state changes, React re-renders the component and its children (optimized by memo, useMemo, useCallback)
 
 ### Brint's Model
+
 - **No Virtual DOM** - Directly manipulates the real DOM based on fine-grained change notifications
 - **Implicit dependency tracking** - Any property access on a change-enabled object is automatically tracked
 - **Surgical updates** - Only the specific DOM node or attribute affected by a change is updated
 
 ### Key Differences
 
-| Aspect | React | Brint |
-|--------|-------|-------|
-| Change detection | Explicit (setState) | Implicit (Proxy interception) |
-| Update granularity | Component-level | Property/node-level |
-| Re-render scope | Subtree diffing | Only affected nodes |
-| Mental model | Snapshot-based | Reactive streams |
-| State mutation | Immutable preferred | Direct mutation |
+| Aspect             | React               | Brint                         |
+| ------------------ | ------------------- | ----------------------------- |
+| Change detection   | Explicit (setState) | Implicit (Proxy interception) |
+| Update granularity | Component-level     | Property/node-level           |
+| Re-render scope    | Subtree diffing     | Only affected nodes           |
+| Mental model       | Snapshot-based      | Reactive streams              |
+| State mutation     | Immutable preferred | Direct mutation               |
 
 ### Implications
+
 - **Performance**: Brint can potentially avoid React's diffing overhead for simple updates. However, React's diffing is highly optimized and may perform better for large structural changes.
 - **Developer experience**: React requires explicit dependency arrays in hooks; Brint tracks dependencies automatically but this "magic" can be confusing.
 - **Debugging**: React's explicit state changes are easier to trace; Brint's automatic tracking may make it harder to understand why something re-rendered.
@@ -46,12 +49,15 @@ This is fundamentally different from React's approach but shares similarities wi
 ## Comparison to Vue
 
 ### Vue's Model
+
 - **Proxy-based reactivity** (Vue 3) - Similar to chchchchanges, Vue uses Proxies to intercept property access
 - **Computed properties** - Equivalent to CachedFunction
 - **Template compilation** - Vue compiles templates to optimized render functions
 
 ### Similarities
+
 Both Brint/chchchchanges and Vue 3:
+
 - Use JavaScript Proxies for change detection
 - Automatically track dependencies during function execution
 - Support fine-grained reactivity at the property level
@@ -59,15 +65,16 @@ Both Brint/chchchchanges and Vue 3:
 
 ### Key Differences
 
-| Aspect | Vue | Brint |
-|--------|-----|-------|
-| Template system | Single-file components with template DSL | Pure JavaScript RenderSpecs |
-| Tooling | Extensive (Vue DevTools, Volar, etc.) | Minimal |
-| Reactivity scope | Component-scoped by default | Global domain (or explicit domains) |
-| Array tracking | Granular per-element | Single change source for all reads/writes |
-| Ecosystem | Mature (Vuex/Pinia, Vue Router, etc.) | None |
+| Aspect           | Vue                                      | Brint                                     |
+| ---------------- | ---------------------------------------- | ----------------------------------------- |
+| Template system  | Single-file components with template DSL | Pure JavaScript RenderSpecs               |
+| Tooling          | Extensive (Vue DevTools, Volar, etc.)    | Minimal                                   |
+| Reactivity scope | Component-scoped by default              | Global domain (or explicit domains)       |
+| Array tracking   | Granular per-element                     | Single change source for all reads/writes |
+| Ecosystem        | Mature (Vuex/Pinia, Vue Router, etc.)    | None                                      |
 
 ### Implications
+
 - **Array handling**: Vue tracks individual array elements; chchchchanges uses a single change source for the entire array. This means Brint may over-render when individual array elements change.
 - **Ecosystem**: Vue has years of tooling, libraries, and documentation. Brint is starting from scratch.
 
@@ -78,25 +85,28 @@ Both Brint/chchchchanges and Vue 3:
 Solid.js is perhaps the closest existing framework to Brint's approach.
 
 ### Solid's Model
+
 - **Fine-grained reactivity** - Signals and computed values track dependencies automatically
 - **No Virtual DOM** - Direct DOM manipulation via compiled templates
 - **JSX compilation** - Transforms JSX to efficient DOM operations at build time
 
 ### Similarities
+
 - Both use fine-grained reactivity without a virtual DOM
 - Both aim for minimal re-rendering
 - Both track dependencies automatically
 
 ### Key Differences
 
-| Aspect | Solid | Brint |
-|--------|-------|-------|
-| Reactive primitives | Signals (explicit) | Proxy-wrapped objects (implicit) |
-| Compilation | Heavy (JSX to optimized DOM) | Likely minimal |
-| Component model | Functions run once | TBD |
-| Array handling | `<For>` with keyed reconciliation | TBD |
+| Aspect              | Solid                             | Brint                            |
+| ------------------- | --------------------------------- | -------------------------------- |
+| Reactive primitives | Signals (explicit)                | Proxy-wrapped objects (implicit) |
+| Compilation         | Heavy (JSX to optimized DOM)      | Likely minimal                   |
+| Component model     | Functions run once                | TBD                              |
+| Array handling      | `<For>` with keyed reconciliation | TBD                              |
 
 ### Implications
+
 - **Solid's signals are explicit** - You call `signal()` to create reactive state. Brint's Proxy approach is more implicit, which can be either convenient or confusing.
 - **Compilation**: Solid's compiler produces highly optimized code. Brint's runtime approach may have more overhead.
 
@@ -105,11 +115,13 @@ Solid.js is perhaps the closest existing framework to Brint's approach.
 ## Comparison to Svelte
 
 ### Svelte's Model
+
 - **Compile-time reactivity** - The compiler transforms component code to efficient imperative updates
 - **No runtime framework** - Reactivity is compiled away
 - **$: syntax** - Explicit reactive declarations
 
 ### Key Differences
+
 - Svelte's approach is fundamentally compile-time; Brint is runtime
 - Svelte requires a build step with its custom compiler; Brint could theoretically work without a build step
 - Svelte has a custom file format (.svelte); Brint is pure TypeScript/JavaScript
@@ -125,16 +137,25 @@ List rendering is one of the most complex challenges in UI frameworks. When a li
 Consider rendering a list of items:
 
 ```javascript
-items = [{id: 1, text: "A"}, {id: 2, text: "B"}, {id: 3, text: "C"}]
+items = [
+  { id: 1, text: "A" },
+  { id: 2, text: "B" },
+  { id: 3, text: "C" },
+]
 ```
 
 Now the user reorders the list:
 
 ```javascript
-items = [{id: 3, text: "C"}, {id: 1, text: "A"}, {id: 2, text: "B"}]
+items = [
+  { id: 3, text: "C" },
+  { id: 1, text: "A" },
+  { id: 2, text: "B" },
+]
 ```
 
 A naive approach would:
+
 1. Update DOM node 1: "A" → "C"
 2. Update DOM node 2: "B" → "A"
 3. Update DOM node 3: "C" → "B"
@@ -148,12 +169,13 @@ This is inefficient (3 updates instead of moving nodes) and destroys state. If i
 React uses a `key` prop to identify list items:
 
 ```jsx
-{items.map(item => (
-  <Item key={item.id} data={item} />
-))}
+{
+  items.map((item) => <Item key={item.id} data={item} />)
+}
 ```
 
 **Reconciliation Algorithm:**
+
 1. React builds a map of `key → fiber node` from the previous render
 2. For each item in the new list, it looks up the key in the map
 3. If found: reuse the fiber, update props, potentially move the DOM node
@@ -161,6 +183,7 @@ React uses a `key` prop to identify list items:
 5. Any fibers not matched are unmounted (cleanup runs)
 
 **Key behaviors:**
+
 - Keys must be stable, unique among siblings
 - Using array index as key defeats the purpose (same problem as no key)
 - React warns if keys are missing in development
@@ -195,6 +218,7 @@ Middle requires LIS algorithm
 ```
 
 **Key behaviors:**
+
 - Without `:key`, Vue uses an "in-place patch" strategy (like the naive approach)
 - Vue recommends always providing keys for stateful components
 - Supports using objects as keys (not just strings/numbers)
@@ -205,10 +229,9 @@ Middle requires LIS algorithm
 Solid provides specialized components for list rendering:
 
 **`<For>` - Keyed by reference:**
+
 ```jsx
-<For each={items()}>
-  {(item, index) => <Item data={item} />}
-</For>
+<For each={items()}>{(item, index) => <Item data={item} />}</For>
 ```
 
 - Tracks items by reference identity (object ===)
@@ -217,10 +240,9 @@ Solid provides specialized components for list rendering:
 - Index is a signal that updates if position changes
 
 **`<Index>` - Keyed by index:**
+
 ```jsx
-<Index each={items()}>
-  {(item, index) => <Item data={item()} />}
-</Index>
+<Index each={items()}>{(item, index) => <Item data={item()} />}</Index>
 ```
 
 - Tracks items by array index
@@ -228,6 +250,7 @@ Solid provides specialized components for list rendering:
 - Useful for primitive arrays where values change but order is stable
 
 **Reconciliation details:**
+
 - Solid's `<For>` uses a diffing algorithm similar to Vue's
 - Because Solid doesn't have a virtual DOM, it manipulates real DOM nodes directly
 - Component instances are preserved across moves (critical for maintaining state)
@@ -235,9 +258,12 @@ Solid provides specialized components for list rendering:
 
 **Why Solid needs special components:**
 Unlike React/Vue where you can use `.map()`, Solid's reactive model requires special handling:
+
 ```jsx
 // This DOESN'T work correctly in Solid:
-{items().map(item => <Item data={item} />)}
+{
+  items().map((item) => <Item data={item} />)
+}
 // The entire map re-runs on any change to items
 ```
 
@@ -267,6 +293,7 @@ function update(ctx, items) {
 ```
 
 **Key behaviors:**
+
 - The parenthetical `(item.id)` specifies the key
 - Without a key, Svelte uses index-based updates
 - Svelte's compiler generates minimal, specific DOM operations
@@ -274,12 +301,12 @@ function update(ctx, items) {
 
 ### Comparison Summary
 
-| Framework | Syntax | Default (no key) | Reconciliation |
-|-----------|--------|------------------|----------------|
-| React | `key={id}` | Index-based (warning) | Key map lookup |
-| Vue | `:key="id"` | In-place patch | LIS optimization |
-| Solid | `<For>` / `<Index>` | Reference identity | Similar to Vue |
-| Svelte | `(id)` | Index-based | Compiled algorithm |
+| Framework | Syntax              | Default (no key)      | Reconciliation     |
+| --------- | ------------------- | --------------------- | ------------------ |
+| React     | `key={id}`          | Index-based (warning) | Key map lookup     |
+| Vue       | `:key="id"`         | In-place patch        | LIS optimization   |
+| Solid     | `<For>` / `<Index>` | Reference identity    | Similar to Vue     |
+| Svelte    | `(id)`              | Index-based           | Compiled algorithm |
 
 ### Implications for Brint
 
@@ -296,7 +323,8 @@ const state = Changes.enableChanges({ items: [a, b, c] })
 state.items[0] = newValue
 ```
 
-For list reconciliation, Brint would need to know *what* changed:
+For list reconciliation, Brint would need to know _what_ changed:
+
 - Which indices were modified?
 - Was this an insertion, deletion, or move?
 - What are the stable identities of items?
@@ -304,10 +332,13 @@ For list reconciliation, Brint would need to know *what* changed:
 **2. Possible Approaches**
 
 **Option A: Special list component (like Solid)**
+
 ```javascript
 // Hypothetical Brint API
-["For", { each: () => state.items, key: item => item.id },
-  (item, index) => ["li", {}, item.text]
+;[
+  "For",
+  { each: () => state.items, key: (item) => item.id },
+  (item, index) => ["li", {}, item.text],
 ]
 ```
 
@@ -315,6 +346,7 @@ Pros: Explicit, matches Solid's proven model
 Cons: Different from other RenderSpecs, requires new concepts
 
 **Option B: Key attribute on ArrayRenderSpec**
+
 ```javascript
 // Array with key function
 { items: () => state.items, key: item => item.id }
@@ -324,8 +356,9 @@ Pros: Stays within RenderSpec model
 Cons: Overloads object syntax, could be confusing
 
 **Option C: Wrapper function that tracks array diffs**
+
 ```javascript
-Changes.createKeyedList(state.items, item => item.id)
+Changes.createKeyedList(state.items, (item) => item.id)
 // Returns a proxy that provides fine-grained change events
 ```
 
@@ -372,10 +405,10 @@ Rather than diffing before/after array states, chchchchanges could track the act
 
 **Why this is better than diffing:**
 
-| Approach | What happens on `push(item)` |
-|----------|------------------------------|
+| Approach          | What happens on `push(item)`                           |
+| ----------------- | ------------------------------------------------------ |
 | Diff before/after | Compare arrays, discover last item is new, appendChild |
-| Track operation | Emit "push" event, appendChild directly |
+| Track operation   | Emit "push" event, appendChild directly                |
 
 For simple operations, you skip diffing entirely. The intent is preserved.
 
@@ -401,14 +434,18 @@ This keeps chchchchanges focused on change tracking without knowing about DOM.
 
 ```typescript
 // ListRenderSpec consumes array operations directly
-["List", {
-  items: () => state.items,
-  key: item => item.id,
-  render: (item) => ["li", {}, item.text]
-}]
+;[
+  "List",
+  {
+    items: () => state.items,
+    key: (item) => item.id,
+    render: (item) => ["li", {}, item.text],
+  },
+]
 ```
 
 The `ListRenderSpec` would:
+
 1. Subscribe to array operations via `detectArrayChanges`
 2. Translate operations directly to DOM mutations
 3. Maintain a `key → DOM node` map for keyed reconciliation
@@ -439,10 +476,10 @@ Array Proxy                                ListRenderSpec
 Some operations don't map cleanly to simple events:
 
 ```javascript
-arr.sort()           // → onReset (order changed unpredictably)
-arr.reverse()        // → onReset or specialized onReverse
-arr.splice(2, 1, a, b)  // → combined remove + insert
-arr.length = 0       // → onReset with empty array
+arr.sort() // → onReset (order changed unpredictably)
+arr.reverse() // → onReset or specialized onReverse
+arr.splice(2, 1, a, b) // → combined remove + insert
+arr.length = 0 // → onReset with empty array
 ```
 
 The `onReset` fallback ensures correctness even when operations are complex. Performance-sensitive apps would avoid patterns that trigger resets.
@@ -523,7 +560,7 @@ function Timer(props, ctx) {
 }
 
 // Usage as ComponentRenderSpec
-[Timer, { label: "My Timer" }]
+;[Timer, { label: "My Timer" }]
 ```
 
 ### Why React Avoids This Pattern
@@ -573,15 +610,16 @@ This is slightly more magical (relies on "current component" during execution) b
 
 ### Comparison
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| Explicit context argument | Clear, debuggable, no magic | More verbose, extra parameter |
+| Approach                       | Pros                                   | Cons                                |
+| ------------------------------ | -------------------------------------- | ----------------------------------- |
+| Explicit context argument      | Clear, debuggable, no magic            | More verbose, extra parameter       |
 | Implicit context (Solid-style) | Concise, familiar to Solid/React users | Magic, must be called during render |
-| No lifecycle (current state) | Simplest | Apps can't do cleanup properly |
+| No lifecycle (current state)   | Simplest                               | Apps can't do cleanup properly      |
 
 ### Recommendation
 
 Start with the **explicit context argument**. It's:
+
 - Easier to understand and document
 - Doesn't require implicit state management
 - Can always add implicit helpers later as sugar
@@ -610,7 +648,7 @@ The explicit version is the foundation; the implicit version is just syntactic s
 function AutoFocus(props, ctx) {
   ctx.onMount(() => {
     const el = ctx.getElement()
-    el.querySelector('input')?.focus()
+    el.querySelector("input")?.focus()
   })
 
   return ["input", { type: "text" }]
@@ -650,8 +688,7 @@ The `[tag, attrs, children]` array model works well for elements and components:
 But what about:
 
 ```javascript
-["hello", "world"]    // Fragment of two text nodes? Or element with tag "hello"?
-[child1, child2]      // Fragment? Array of children? Something else?
+;["hello", "world"][(child1, child2)] // Fragment of two text nodes? Or element with tag "hello"? // Fragment? Array of children? Something else?
 ```
 
 The first element's type signals the interpretation, but fragments break this — their first child could be anything.
@@ -660,30 +697,23 @@ The first element's type signals the interpretation, but fragments break this �
 
 **Interpretation rules based on first element:**
 
-| First Element | Interpretation |
-|---------------|----------------|
-| `string` | ElementRenderSpec — the string is the tag name |
-| `function` | ComponentRenderSpec — the function is the component |
-| `null` | Fragment — remaining elements are children with no wrapper |
-| `symbol` | Special form — e.g., `List` for keyed list rendering |
+| First Element | Interpretation                                             |
+| ------------- | ---------------------------------------------------------- |
+| `string`      | ElementRenderSpec — the string is the tag name             |
+| `function`    | ComponentRenderSpec — the function is the component        |
+| `null`        | Fragment — remaining elements are children with no wrapper |
+| `symbol`      | Special form — e.g., `List` for keyed list rendering       |
 
 **Fragment syntax:**
 
 ```javascript
 // null tag = fragment (no wrapper element)
 // Attrs are optional, so this is clean:
-[null,
-  ["div", {}, "first"],
-  ["div", {}, "second"]
-]
+;[null, ["div", {}, "first"], ["div", {}, "second"]]
 
 // Component returning multiple elements
 function MyComponent(props, ctx) {
-  return [null,
-    ["header", {}, "Header"],
-    ["main", {}, props.content],
-    ["footer", {}, "Footer"]
-  ]
+  return [null, ["header", {}, "Header"], ["main", {}, props.content], ["footer", {}, "Footer"]]
 }
 ```
 
@@ -692,15 +722,14 @@ Using `null` is intuitive: "no element here, just these children." It's also con
 **Special forms via symbols:**
 
 ```javascript
-import { List } from 'brint'
+import { List } from "brint"
 
 // List with keyed reconciliation and operation-based updates
-[List, { each: () => state.items, key: item => item.id },
-  item => ["li", {}, item.text]
-]
+;[List, { each: () => state.items, key: (item) => item.id }, (item) => ["li", {}, item.text]]
 ```
 
 Symbols are ideal for special forms because:
+
 - They can't collide with string tags or component functions
 - They're easily extensible (add new symbols for new forms)
 - They're explicit — you know it's special because you imported it
@@ -710,19 +739,13 @@ Symbols are ideal for special forms because:
 For ergonomics, Brint can provide helper functions that return the appropriate RenderSpec:
 
 ```javascript
-import { fragment, list } from 'brint'
+import { fragment, list } from "brint"
 
 // fragment(...children) returns [null, ...children]
-fragment(
-  ["div", {}, "first"],
-  ["div", {}, "second"]
-)
+fragment(["div", {}, "first"], ["div", {}, "second"])
 
 // list(config, renderFn) returns [List, config, renderFn]
-list(
-  { each: () => state.items, key: item => item.id },
-  item => ["li", {}, item.text]
-)
+list({ each: () => state.items, key: (item) => item.id }, (item) => ["li", {}, item.text])
 ```
 
 These are just sugar — they return standard RenderSpec arrays:
@@ -743,62 +766,67 @@ HTML elements have two ways to set values:
 
 ```javascript
 // Attribute — set via setAttribute(), always a string
-element.setAttribute('value', 'hello')
+element.setAttribute("value", "hello")
 
 // Property — set via JavaScript property access, can be any type
-element.value = 'hello'
-element.disabled = true      // boolean
-element.items = [1, 2, 3]    // array
+element.value = "hello"
+element.disabled = true // boolean
+element.items = [1, 2, 3] // array
 ```
 
 **When the distinction matters:**
 
-1. **Boolean attributes** — `<input disabled="false">` is still disabled! The attribute's *presence* is what matters. But `element.disabled = false` works correctly.
+1. **Boolean attributes** — `<input disabled="false">` is still disabled! The attribute's _presence_ is what matters. But `element.disabled = false` works correctly.
 
-2. **Input value** — The `value` *attribute* is the initial value; the `value` *property* is the current value. They diverge after user input.
+2. **Input value** — The `value` _attribute_ is the initial value; the `value` _property_ is the current value. They diverge after user input.
 
 3. **Web Components** — Custom elements often have properties that accept complex data:
+
    ```javascript
    // This works — property can hold any value
-   myElement.items = [{ id: 1, name: 'foo' }]
+   myElement.items = [{ id: 1, name: "foo" }]
 
    // This doesn't — attributes are always strings
-   myElement.setAttribute('items', [{ id: 1, name: 'foo' }])  // becomes "[object Object]"
+   myElement.setAttribute("items", [{ id: 1, name: "foo" }]) // becomes "[object Object]"
    ```
 
 4. **Event handlers** — The `onclick` attribute takes a string of code; the `onclick` property takes a function. (Brint uses `on: {}` for events, so this is handled separately.)
 
 **How other frameworks handle it:**
 
-| Framework | Syntax |
-|-----------|--------|
-| Vue | `:items.prop="data"` (`.prop` modifier) |
-| Lit | `.items=${data}` (dot prefix for properties) |
-| Solid | `prop:items={data}` (`prop:` prefix) |
-| React | Uses properties for most things, special-cases certain attributes |
+| Framework | Syntax                                                            |
+| --------- | ----------------------------------------------------------------- |
+| Vue       | `:items.prop="data"` (`.prop` modifier)                           |
+| Lit       | `.items=${data}` (dot prefix for properties)                      |
+| Solid     | `prop:items={data}` (`prop:` prefix)                              |
+| React     | Uses properties for most things, special-cases certain attributes |
 
 **Solution for Brint: `properties` key**
 
 Add a special `properties` key to the attrs object for setting DOM properties:
 
 ```javascript
-["input", {
-  type: "checkbox",          // attribute
-  class: "my-checkbox",      // attribute
-  properties: {
-    checked: isChecked,      // property — boolean, not string
-    indeterminate: isIndeterminate  // property — no attribute equivalent
-  }
-}]
-
-["my-custom-element", {
-  class: "styled",           // attribute
-  "data-id": "123",          // attribute
-  properties: {
-    items: [1, 2, 3],        // property — complex data
-    config: { debug: true }  // property — object
-  }
-}]
+;[
+  "input",
+  {
+    type: "checkbox", // attribute
+    class: "my-checkbox", // attribute
+    properties: {
+      checked: isChecked, // property — boolean, not string
+      indeterminate: isIndeterminate, // property — no attribute equivalent
+    },
+  },
+][
+  ("my-custom-element",
+  {
+    class: "styled", // attribute
+    "data-id": "123", // attribute
+    properties: {
+      items: [1, 2, 3], // property — complex data
+      config: { debug: true }, // property — object
+    },
+  })
+]
 ```
 
 **Reactive properties:**
@@ -806,23 +834,26 @@ Add a special `properties` key to the attrs object for setting DOM properties:
 Properties can be reactive just like attributes:
 
 ```javascript
-["my-custom-element", {
-  properties: {
-    items: () => state.items,        // reactive property
-    selected: () => state.selectedId // reactive property
-  }
-}]
+;[
+  "my-custom-element",
+  {
+    properties: {
+      items: () => state.items, // reactive property
+      selected: () => state.selectedId, // reactive property
+    },
+  },
+]
 ```
 
 When the reactive function's dependencies change, Brint updates the DOM property directly.
 
 **Why `properties` key over prefix convention:**
 
-| Approach | Example | Pros | Cons |
-|----------|---------|------|------|
-| `properties` key | `properties: { items: data }` | Explicit, clear separation | Slightly verbose |
-| Dot prefix | `".items": data` | Concise | Magical, easy to forget |
-| `prop:` prefix | `"prop:items": data` | Self-documenting | Verbose prefix |
+| Approach         | Example                       | Pros                       | Cons                    |
+| ---------------- | ----------------------------- | -------------------------- | ----------------------- |
+| `properties` key | `properties: { items: data }` | Explicit, clear separation | Slightly verbose        |
+| Dot prefix       | `".items": data`              | Concise                    | Magical, easy to forget |
+| `prop:` prefix   | `"prop:items": data`          | Self-documenting           | Verbose prefix          |
 
 The `properties` key is explicit without being overly verbose. It clearly separates "these are attributes" from "these are properties" without requiring developers to remember prefix conventions.
 
@@ -915,21 +946,15 @@ null
 The symbol-based approach allows adding new special forms as needed:
 
 ```javascript
-import { List, Portal, Suspense, ErrorBoundary } from 'brint'
+import { List, Portal, Suspense, ErrorBoundary } from "brint"
 
 // Portal - render children into a different DOM node
-[Portal, { target: document.body },
-  ["div", { class: "modal" }, "Modal content"]
-]
-
-// Suspense - show fallback while async content loads
-[Suspense, { fallback: ["div", {}, "Loading..."] },
-  [AsyncComponent, {}]
-]
-
-// ErrorBoundary - catch errors in children
-[ErrorBoundary, { fallback: err => ["div", {}, `Error: ${err.message}`] },
-  [RiskyComponent, {}]
+;[Portal, { target: document.body }, ["div", { class: "modal" }, "Modal content"]][
+  // Suspense - show fallback while async content loads
+  (Suspense, { fallback: ["div", {}, "Loading..."] }, [AsyncComponent, {}])
+][
+  // ErrorBoundary - catch errors in children
+  (ErrorBoundary, { fallback: (err) => ["div", {}, `Error: ${err.message}`] }, [RiskyComponent, {}])
 ]
 ```
 
@@ -957,7 +982,7 @@ In this model, async state is just... state:
 const state = Changes.enableChanges({
   users: null,
   usersLoading: true,
-  usersError: null
+  usersError: null,
 })
 
 // Async happens in application code, completely outside Brint
@@ -976,9 +1001,7 @@ async function loadUsers() {
 function UserList(props, ctx) {
   if (state.usersLoading) return ["div", {}, "Loading..."]
   if (state.usersError) return ["div", {}, `Error: ${state.usersError.message}`]
-  return [List, { each: () => state.users, key: u => u.id },
-    user => ["div", {}, user.name]
-  ]
+  return [List, { each: () => state.users, key: (u) => u.id }, (user) => ["div", {}, user.name]]
 }
 ```
 
@@ -995,22 +1018,24 @@ React's Suspense offers:
 
 But these are specific UX patterns, not fundamental requirements:
 
-| Concern | Suspense approach | Async-outside approach |
-|---------|-------------------|------------------------|
-| Loading states | Implicit (component suspends) | Explicit (model has `loading` flag) |
+| Concern        | Suspense approach                             | Async-outside approach                       |
+| -------------- | --------------------------------------------- | -------------------------------------------- |
+| Loading states | Implicit (component suspends)                 | Explicit (model has `loading` flag)          |
 | Error handling | Error boundaries catch thrown promises/errors | Model has `error` field, component checks it |
-| Nested loading | Multiple Suspense boundaries | Multiple loading flags |
-| Code splitting | `lazy()` | Router-level or manual |
+| Nested loading | Multiple Suspense boundaries                  | Multiple loading flags                       |
+| Code splitting | `lazy()`                                      | Router-level or manual                       |
 
 ### When Each Approach Works
 
 **Async-outside works great for:**
+
 - Client-side SPAs (the majority of apps)
 - When you want explicit control over loading UX
 - When async patterns are straightforward (fetch on mount, show spinner)
 - When you want the model to be the complete, inspectable picture
 
 **Suspense-style helps with:**
+
 - Deeply nested async with automatic fallback bubbling
 - Streaming SSR (progressively sending HTML)
 - Framework-level code splitting
@@ -1020,7 +1045,7 @@ But these are specific UX patterns, not fundamental requirements:
 
 No. MobX, Zustand, Jotai, Pinia — major state management libraries — all work this way. The model holds loading/error state; components render based on it. React pushed Suspense heavily, but it's far from universally adopted. Vue's Suspense is still experimental. Solid has "resources" but they're optional.
 
-Keeping async outside the rendering layer is a valid architectural choice. It's arguably *more* predictable because there's no magic "suspend" behavior.
+Keeping async outside the rendering layer is a valid architectural choice. It's arguably _more_ predictable because there's no magic "suspend" behavior.
 
 ### Possible Enhancement: Promise Integration in chchchchanges
 
@@ -1039,14 +1064,14 @@ chchchchanges could treat a Promise as a reactive value that transitions through
 
 ```javascript
 const state = Changes.enableChanges({
-  users: fetchUsers()  // a Promise
+  users: fetchUsers(), // a Promise
 })
 
 // chchchchanges detects the Promise and wraps it
 // When accessed, it exposes reactive state:
-state.users.status   // "pending" | "fulfilled" | "rejected" (reactive)
-state.users.value    // T | undefined (reactive)
-state.users.error    // Error | undefined (reactive)
+state.users.status // "pending" | "fulfilled" | "rejected" (reactive)
+state.users.value // T | undefined (reactive)
+state.users.error // Error | undefined (reactive)
 ```
 
 The Promise's `.then()` and `.catch()` handlers update these reactive properties, triggering re-renders.
@@ -1054,17 +1079,17 @@ The Promise's `.then()` and `.catch()` handlers update these reactive properties
 **Option B: Explicit resource primitive**
 
 ```javascript
-import { Changes } from 'chchchchanges'
+import { Changes } from "chchchchanges"
 
 const users = Changes.createResource(() => fetchUsers())
 
 // Returns a reactive resource object:
-users.loading  // boolean (reactive)
-users.data     // T | undefined (reactive)
-users.error    // Error | undefined (reactive)
+users.loading // boolean (reactive)
+users.data // T | undefined (reactive)
+users.error // Error | undefined (reactive)
 
 // Utility methods:
-users.refetch()   // re-run the fetcher
+users.refetch() // re-run the fetcher
 users.mutate(val) // optimistically update data
 ```
 
@@ -1073,14 +1098,15 @@ This is similar to Solid's `createResource`, React Query, or SWR.
 **Option C: Brint-level Await form**
 
 ```javascript
-import { Await } from 'brint'
-
-[Await, { promise: () => fetchUsers() },
+import { Await } from "brint"
+;[
+  Await,
+  { promise: () => fetchUsers() },
   {
     pending: () => ["div", {}, "Loading..."],
     fulfilled: (data) => [UserList, { users: data }],
-    rejected: (err) => ["div", {}, `Error: ${err.message}`]
-  }
+    rejected: (err) => ["div", {}, `Error: ${err.message}`],
+  },
 ]
 ```
 
@@ -1094,7 +1120,7 @@ function wrapPromise(promise, changeDomain) {
   const state = {
     status: "pending",
     value: undefined,
-    error: undefined
+    error: undefined,
   }
 
   // Make state reactive
@@ -1102,14 +1128,14 @@ function wrapPromise(promise, changeDomain) {
 
   // Promise callbacks update reactive state
   promise.then(
-    value => {
+    (value) => {
       reactiveState.status = "fulfilled"
       reactiveState.value = value
     },
-    error => {
+    (error) => {
       reactiveState.status = "rejected"
       reactiveState.error = error
-    }
+    },
   )
 
   return reactiveState
@@ -1134,52 +1160,66 @@ These can be added later without breaking the core model. The async-outside appr
 ## Potential Pitfalls
 
 ### 1. Proxy Limitations
+
 - **Non-proxyable objects**: Some built-in objects (Date, RegExp, certain DOM objects) cannot be proxied effectively
 - **Identity confusion**: The proxy and target are different objects, which can cause issues with `===` comparisons, WeakMap keys, etc.
 - **Performance overhead**: Every property access goes through the Proxy trap
 
 ### 2. Implicit Dependencies Can Be Surprising
+
 - **Conditional dependencies**: If a function reads `a.foo` only when `a.bar` is true, the dependency on `a.foo` appears and disappears. This can lead to unexpected behavior.
 - **Debugging difficulty**: It's not obvious from reading code what will cause a re-render
 - **Stale closure problem**: Functions capturing values from outer scopes may not trigger re-renders when those values change (if they weren't accessed through a proxy)
 
 ### 3. Array Handling Granularity — Addressed
+
 The current chchchchanges design uses a single change source for arrays. See **Proposed Architecture: Operation-Based Array Tracking** in the list reconciliation deep dive for a solution:
+
 - chchchchanges emits specific operations (`push`, `splice`, etc.) instead of just "changed"
 - Brint's `ListRenderSpec` consumes these for direct DOM manipulation
 - Falls back to diffing only for complex cases like `sort()`
 
 ### 4. Memory Management — Partially Addressed
+
 - **Listener cleanup**: ~~Requires explicit `remove()` calls~~ — Addressed in **Deep Dive: Component Lifecycle**. Brint manages cleanup automatically when components unmount; apps don't call `remove()` manually.
 - **Proxy cache growth**: Still a concern. Every object gets a cached proxy. Long-running apps with many transient objects could accumulate proxies. May need a strategy for pruning unused proxies.
 
 ### 5. ChangeDomain Isolation
+
 - Objects can only belong to one ChangeDomain
 - Cross-domain data sharing could be problematic
 - Global domain usage might cause unexpected interactions
 
 ### 6. Async Challenges — Reframed
+
 The docs state "The function must be synchronous - async functions are not supported." This is about dependency tracking during function execution, not a fundamental limitation. See **Deep Dive: Async and the Rendering Layer** below for a full discussion. Key points:
+
 - Async can live outside the rendering layer — processes update the model, Brint renders it
 - Promises could potentially integrate with chchchchanges directly
 - This is a valid architectural choice, not "old thinking"
 
 ### 7. RenderSpec Ambiguities — Addressed
+
 See **Deep Dive: RenderSpec Syntax Clarification**. The solution:
+
 - First element determines interpretation: `string` → element, `function` → component, `null` → fragment, `symbol` → special form
 - Fragments use `[null, child1, child2]` — unambiguous and intuitive
 - Special forms like `List` use symbols to avoid collision with tags or components
 
 ### 8. Attribute/Property Confusion — Addressed
+
 See **Attribute vs Property Handling** in the RenderSpec syntax deep dive. Solution: a `properties` key in the attrs object for setting DOM properties (as opposed to HTML attributes). This is essential for web components and certain built-in element behaviors.
 
 ### 9. Component Lifecycle — Addressed
+
 The original overview doesn't mention lifecycle hooks, but there's no architectural barrier. See **Deep Dive: Component Lifecycle** above for a proposed solution using an explicit component context argument. Key points:
+
 - Brint manages cleanup automatically (no manual `remove()` calls)
 - Component functions receive a `ctx` argument with `onMount`, `onUnmount`, `onUpdate`
 - Explicit context avoids React's hook call-order magic
 
 ### 10. Server-Side Rendering
+
 No mention of SSR support. The Proxy-based approach may be difficult to make isomorphic.
 
 ---
@@ -1187,21 +1227,27 @@ No mention of SSR support. The Proxy-based approach may be difficult to make iso
 ## Strengths
 
 ### 1. Simplicity
+
 The core concept is straightforward: wrap objects, track reads, notify on writes. No special syntax or compilation required.
 
 ### 2. Performance Potential
+
 Fine-grained updates without virtual DOM diffing could be very efficient for apps with many small, frequent updates.
 
 ### 3. Flexibility
+
 RenderSpecs are plain data structures. This enables:
+
 - Easy serialization
 - Server-driven UI
 - Testing without DOM
 
 ### 4. Gradual Adoption
+
 Since it's just JavaScript, it could potentially be integrated into existing applications incrementally.
 
 ### 5. TypeScript-First
+
 Built with TypeScript from the start, which should provide good type inference for RenderSpecs.
 
 ---
@@ -1242,6 +1288,7 @@ There's a gap in the current landscape between:
 Some developers want enough abstraction to be productive, but simple enough to fully understand. This is similar to the appeal of htmx, Alpine.js, or Preact — "I can read the whole source and understand it" is genuinely valuable.
 
 Brint could serve developers who want:
+
 - Reactive UI without a virtual DOM
 - Minimal conceptual overhead
 - No build step required (or minimal)
@@ -1257,11 +1304,13 @@ A reasonable concern: will today's frameworks exist in 10 years?
 - The only truly stable thing is the web platform itself
 
 **What ages well:**
+
 - HTML, CSS, vanilla JavaScript
 - Standard APIs (DOM, Fetch, Proxies, Web Components)
 - Simple, transparent abstractions
 
 **What ages poorly:**
+
 - Heavy abstractions that fight the platform
 - Complex build tooling with many dependencies
 - "Magic" that hides what's actually happening
@@ -1270,13 +1319,13 @@ Brint's approach — Proxies (standard), DOM APIs (standard), TypeScript (stable
 
 ### Risk Assessment for Personal Projects
 
-| Risk | Mitigation |
-|------|------------|
-| No ecosystem (routing, forms, etc.) | Build what you need, skip what you don't |
-| No community support | You understand the whole codebase yourself |
-| Could have edge-case bugs | Established frameworks have these too, just hidden |
-| Framework could be abandoned | It's your framework — you can maintain it |
-| No job market relevance | Irrelevant for personal projects |
+| Risk                                | Mitigation                                         |
+| ----------------------------------- | -------------------------------------------------- |
+| No ecosystem (routing, forms, etc.) | Build what you need, skip what you don't           |
+| No community support                | You understand the whole codebase yourself         |
+| Could have edge-case bugs           | Established frameworks have these too, just hidden |
+| Framework could be abandoned        | It's your framework — you can maintain it          |
+| No job market relevance             | Irrelevant for personal projects                   |
 
 For personal sites, these tradeoffs are often acceptable or even desirable. The learning and control are part of the point.
 
@@ -1289,6 +1338,7 @@ A practical question: will AI coding assistants (like Claude Code) be able to he
 **Yes, and here's why:**
 
 AI helpfulness doesn't depend on framework popularity. Claude understands:
+
 - JavaScript/TypeScript deeply
 - DOM APIs (standard, well-documented)
 - Reactive programming concepts (from Vue, MobX, Solid, etc.)
@@ -1311,7 +1361,7 @@ The RenderSpec format is simple enough to understand from examples. Claude doesn
 
 **A potential advantage:**
 
-AI might actually be *more* helpful with a simple, transparent framework than a complex one full of magic and gotchas. Debugging "here's my RenderSpec, here's what it should do, it's doing X instead" is more tractable than debugging "my useEffect is firing twice because of StrictMode concurrent rendering something something."
+AI might actually be _more_ helpful with a simple, transparent framework than a complex one full of magic and gotchas. Debugging "here's my RenderSpec, here's what it should do, it's doing X instead" is more tractable than debugging "my useEffect is firing twice because of StrictMode concurrent rendering something something."
 
 Transparent code is debuggable code — by humans and AI alike.
 
