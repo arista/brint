@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Phase 2: Basic Static Rendering
+I want to double-check findPreviousDOMNode(), getLastDOMNode(), getFirstDOMNode(). I'm concerned about the case where a fragment contains a fragment contains a fragment, etc. For the lowest level fragment, the actual DOM Node parent could be several levels up, and the first child of that node could be at a different level of the RenderNode tree. Is that handled here?
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -17,12 +17,12 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~Core type definitions (RenderSpec, RenderNode)~~
 - ~~Top-level API skeleton (`create`, `Brint`, `RenderHandle`)~~
 
-### Phase 2: Basic Static Rendering
+### Phase 2: Basic Static Rendering (COMPLETE)
 
-- NullRenderSpec → RenderNode (no DOM node)
-- TextRenderSpec → Text node
-- ElementRenderSpec → Element (static attributes only, no reactivity)
-- Basic tree structure (parent/children/prev/next)
+- ~~NullRenderSpec → RenderNode (no DOM node)~~
+- ~~TextRenderSpec → Text node~~
+- ~~ElementRenderSpec → Element (static attributes only, no reactivity)~~
+- ~~Basic tree structure (parent/children/prev/next)~~
 
 ### Phase 3: Element Details (Static)
 

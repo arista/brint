@@ -44,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-prettier": "^10",
     "globals": "^16",
+    "happy-dom": "^20.7.0",
     "prettier": "^3",
     "tsup": "^8",
     "tsx": "^4",
