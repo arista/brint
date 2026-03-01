@@ -4,18 +4,18 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Let's start with creating the basic scaffolding for a typescript project. I guess this would be Phase 1a of the Implementation Plan below. Look at ../chchchchanges to see what previous choices I made for scaffolding. I also had you create a DEVELOPMENT.md that outlines the functions a developer would need to use (and I think it's referenced from CLAUDE.md so you know what to do in the future).
+Phase 2: Basic Static Rendering
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
 ## Implementation Plan
 
-### Phase 1: Project Scaffolding
+### Phase 1: Project Scaffolding (COMPLETE)
 
-- TypeScript/build configuration
-- Package structure
-- Core type definitions (RenderSpec, RenderNode)
-- Top-level API skeleton (`create`, `Brint`, `RenderHandle`)
+- ~~TypeScript/build configuration~~
+- ~~Package structure~~
+- ~~Core type definitions (RenderSpec, RenderNode)~~
+- ~~Top-level API skeleton (`create`, `Brint`, `RenderHandle`)~~
 
 ### Phase 2: Basic Static Rendering
 
