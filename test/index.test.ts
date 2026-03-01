@@ -284,6 +284,233 @@ describe("brint", () => {
         const input = container.firstChild as Element
         assert.equal(input.getAttribute("tabindex"), "5")
       })
+
+      it("should handle array attribute (space-joined)", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { class: ["foo", "bar", "baz"] }], container)
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("class"), "foo bar baz")
+      })
+
+      it("should flatten nested arrays in attributes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { class: ["foo", ["bar", "baz"], "qux"] }], container)
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("class"), "foo bar baz qux")
+      })
+
+      it("should skip null, undefined, and booleans in array attributes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          ["div", { class: ["foo", null, "bar", undefined, true, false, "baz"] }],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("class"), "foo bar baz")
+      })
+
+      it("should convert numbers in array attributes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { "data-values": [1, 2, 3] }], container)
+
+        const div = container.firstChild as Element
+        assert.equal(div.getAttribute("data-values"), "1 2 3")
+      })
+
+      it("should handle empty array as null attribute", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { class: [] }], container)
+
+        const div = container.firstChild as Element
+        assert.equal(div.hasAttribute("class"), false)
+      })
+    })
+
+    describe("styles", () => {
+      it("should apply style properties", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { style: { color: "red", backgroundColor: "blue" } }], container)
+
+        const div = container.firstChild as HTMLElement
+        assert.equal(div.style.color, "red")
+        assert.equal(div.style.backgroundColor, "blue")
+      })
+
+      it("should handle numeric style values", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { style: { opacity: 0.5, zIndex: 10 } }], container)
+
+        const div = container.firstChild as HTMLElement
+        assert.equal(div.style.opacity, "0.5")
+        assert.equal(div.style.zIndex, "10")
+      })
+
+      it("should remove style property with null", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        // First set a style
+        const div = document.createElement("div")
+        div.style.color = "red"
+        container.appendChild(div)
+
+        // Render with null should remove it
+        brint.render(["div", { style: { color: null } }], div)
+
+        const inner = div.firstChild as HTMLElement
+        assert.equal(inner.style.color, "")
+      })
+
+      it("should handle array style values (space-joined)", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        // Use boxShadow as it accepts space-separated values
+        brint.render(["div", { style: { boxShadow: ["1px", "2px", "3px", "black"] } }], container)
+
+        const div = container.firstChild as HTMLElement
+        assert.equal(div.style.boxShadow, "1px 2px 3px black")
+      })
+    })
+
+    describe("event listeners", () => {
+      it("should add event listener", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+        let clicked = false
+
+        brint.render(
+          [
+            "button",
+            {
+              on: {
+                click: () => {
+                  clicked = true
+                },
+              },
+            },
+          ],
+          container,
+        )
+
+        const button = container.firstChild as HTMLElement
+        button.click()
+
+        assert.equal(clicked, true)
+      })
+
+      it("should support event listener with options", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+        let count = 0
+
+        brint.render(
+          [
+            "button",
+            {
+              on: {
+                click: {
+                  listener: () => {
+                    count++
+                  },
+                  options: { once: true },
+                },
+              },
+            },
+          ],
+          container,
+        )
+
+        const button = container.firstChild as HTMLElement
+        button.click()
+        button.click()
+        button.click()
+
+        assert.equal(count, 1)
+      })
+    })
+
+    describe("properties", () => {
+      it("should set DOM properties", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["input", { properties: { value: "hello" } }], container)
+
+        const input = container.firstChild as HTMLInputElement
+        assert.equal(input.value, "hello")
+      })
+
+      it("should set custom properties", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { properties: { customData: { foo: "bar" } } }], container)
+
+        const div = container.firstChild as HTMLElement & { customData: unknown }
+        assert.deepEqual(div.customData, { foo: "bar" })
+      })
+    })
+
+    describe("xmlns", () => {
+      it("should create SVG elements with namespace", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            "svg",
+            { xmlns: "http://www.w3.org/2000/svg" },
+            ["circle", { cx: "50", cy: "50", r: "40" }],
+          ],
+          container,
+        )
+
+        const svg = container.firstChild as SVGElement
+        assert.equal(svg.namespaceURI, "http://www.w3.org/2000/svg")
+
+        const circle = svg.firstChild as SVGElement
+        assert.equal(circle.namespaceURI, "http://www.w3.org/2000/svg")
+        assert.equal(circle.getAttribute("cx"), "50")
+      })
+
+      it("should inherit xmlns to nested children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            "svg",
+            { xmlns: "http://www.w3.org/2000/svg" },
+            ["g", [["rect", { x: "0", y: "0", width: "100", height: "100" }]]],
+          ],
+          container,
+        )
+
+        const svg = container.firstChild as SVGElement
+        const g = svg.firstChild as SVGElement
+        const rect = g.firstChild as SVGElement
+
+        assert.equal(g.namespaceURI, "http://www.w3.org/2000/svg")
+        assert.equal(rect.namespaceURI, "http://www.w3.org/2000/svg")
+      })
     })
 
     describe("unmount", () => {

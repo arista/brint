@@ -3,7 +3,6 @@ import type {
   ElementRenderSpec,
   ElementArgs,
   ElementChildRenderSpecs,
-  PrimitiveElementValue,
 } from "./index.js"
 import { RenderNode } from "./render-node.js"
 
@@ -102,18 +101,53 @@ function parseElementRenderSpec(spec: ElementRenderSpec): {
 }
 
 /**
- * Render an ElementValue to a string for attribute setting.
- * For Phase 2, we only handle primitive values (no arrays or functions).
+ * Render an array ElementValue to a flattened, space-joined string.
+ * Skips null, undefined, and booleans. For Phase 3, we skip functions.
  */
-function renderPrimitiveElementValue(value: PrimitiveElementValue): string | true | null {
+function renderArrayElementValue(value: unknown[]): string | null {
+  const rendered: string[] = []
+
+  function processItem(item: unknown): void {
+    if (item === null || item === undefined || typeof item === "boolean") {
+      return
+    }
+    if (typeof item === "string") {
+      rendered.push(item)
+      return
+    }
+    if (typeof item === "number") {
+      rendered.push(String(item))
+      return
+    }
+    if (Array.isArray(item)) {
+      for (const nested of item) {
+        processItem(nested)
+      }
+      return
+    }
+    // Skip functions for now (Phase 5 will handle reactive functions)
+  }
+
+  for (const item of value) {
+    processItem(item)
+  }
+
+  if (rendered.length === 0) {
+    return null
+  }
+  return rendered.join(" ")
+}
+
+/**
+ * Render an ElementValue (primitive or array) to a string for attribute setting.
+ * For Phase 3, we handle primitive values and arrays (no reactive functions).
+ */
+function renderElementValue(value: unknown): string | true | null {
   if (value === null || value === undefined) {
     return null
   }
-  if (value === true) {
-    return true
-  }
-  if (value === false) {
-    return null
+  if (typeof value === "boolean") {
+    return value ? true : null
   }
   if (typeof value === "string") {
     return value
@@ -121,40 +155,127 @@ function renderPrimitiveElementValue(value: PrimitiveElementValue): string | tru
   if (typeof value === "number") {
     return String(value)
   }
+  if (Array.isArray(value)) {
+    return renderArrayElementValue(value)
+  }
+  // Skip functions for now (Phase 5)
   return null
 }
 
 /**
  * Apply static attributes to a DOM element.
- * For Phase 2, we skip style, on, properties, and xmlns special handling.
- * We only handle primitive attribute values (no arrays or functions).
+ * Handles normal attributes, arrays (space-joined), but skips functions for now.
  */
 function applyStaticAttributes(element: Element, args: ElementArgs): void {
   for (const [key, value] of Object.entries(args)) {
-    // Skip special keys for now (Phase 3)
+    // Skip special keys - handled separately
     if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
       continue
     }
 
-    // For Phase 2, only handle primitive values
-    if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean" ||
-      value === null ||
-      value === undefined
-    ) {
-      const rendered = renderPrimitiveElementValue(value)
-
-      if (rendered === null) {
-        element.removeAttribute(key)
-      } else if (rendered === true) {
-        element.setAttribute(key, key)
-      } else {
-        element.setAttribute(key, rendered)
-      }
+    // Skip functions for now (Phase 5 will handle reactive functions)
+    if (typeof value === "function") {
+      continue
     }
-    // Skip arrays and functions for now (Phase 5)
+
+    const rendered = renderElementValue(value)
+
+    if (rendered === null) {
+      element.removeAttribute(key)
+    } else if (rendered === true) {
+      element.setAttribute(key, key)
+    } else {
+      element.setAttribute(key, rendered)
+    }
+  }
+}
+
+/**
+ * Apply static styles to a DOM element.
+ * Style properties use camelCase (matching DOM API).
+ */
+function applyStaticStyles(element: Element, styles: Record<string, unknown>): void {
+  // Check if element has a style property (HTMLElement or SVGElement)
+  const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
+  if (!elementWithStyle.style) {
+    return
+  }
+
+  for (const [property, value] of Object.entries(styles)) {
+    // Skip functions for now (Phase 5 will handle reactive functions)
+    if (typeof value === "function") {
+      continue
+    }
+
+    const rendered = renderElementValue(value)
+
+    if (rendered === true) {
+      // Boolean true is not valid for style properties
+      console.error(`Invalid style value: true for property "${property}"`)
+      continue
+    }
+
+    if (rendered === null) {
+      // Remove the style property
+      elementWithStyle.style!.removeProperty(property)
+    } else {
+      // Set the style property
+      // Note: camelCase properties need to use bracket notation
+      ;(elementWithStyle.style as unknown as Record<string, string>)[property] = rendered
+    }
+  }
+}
+
+/**
+ * Apply event listeners to a DOM element.
+ * Supports both simple functions and objects with listener + options.
+ */
+function applyEventListeners(element: Element, handlers: Record<string, unknown>): void {
+  for (const [eventName, handler] of Object.entries(handlers)) {
+    if (handler === null || handler === undefined) {
+      continue
+    }
+
+    if (typeof handler === "function") {
+      element.addEventListener(eventName, handler as EventListener)
+    } else if (typeof handler === "object" && "listener" in handler) {
+      const { listener, options } = handler as {
+        listener: EventListener
+        options?: AddEventListenerOptions
+      }
+      element.addEventListener(eventName, listener, options)
+    }
+  }
+}
+
+/**
+ * Apply properties directly to a DOM element.
+ * For Phase 3, we skip function values (Phase 5 will handle reactive properties).
+ */
+function applyStaticProperties(
+  element: Element,
+  properties: Record<string | symbol, unknown>,
+): void {
+  for (const [key, value] of Object.entries(properties)) {
+    // Skip functions for now (Phase 5 will wrap in CachedFunction)
+    if (typeof value === "function") {
+      continue
+    }
+
+    ;(element as unknown as Record<string, unknown>)[key] = value
+  }
+
+  // Handle symbol keys
+  const symbolKeys = Object.getOwnPropertySymbols(properties)
+  for (const key of symbolKeys) {
+    const value = properties[key]
+
+    // Skip functions for now (Phase 5)
+    if (typeof value === "function") {
+      continue
+    }
+
+    ;(element as unknown as Record<symbol, unknown>)[key] = value
   }
 }
 
@@ -221,6 +342,21 @@ export function render(
     // Apply static attributes
     if (args) {
       applyStaticAttributes(element, args)
+
+      // Apply styles
+      if (args.style) {
+        applyStaticStyles(element, args.style)
+      }
+
+      // Apply event listeners
+      if (args.on) {
+        applyEventListeners(element, args.on)
+      }
+
+      // Apply properties
+      if (args.properties) {
+        applyStaticProperties(element, args.properties)
+      }
     }
 
     // Insert into DOM
