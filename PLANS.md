@@ -4,8 +4,8 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Look at the README.md and docs/overview.md.  You may also need to look at ../chchchchanges.  Provide an analysis, potential pitfalls, and also some comparisons against existing solutions like React, Vue, maybe others.
+I am starting on more detailed [technical design](./docs/design.md).  So far I've outlined the types for a RenderSpec.  I will start looking at the defining the behaviors of these RenderSpecs next, but for now I want to verify that the type definitions I have there are consistent, and that I'm not missing anything.
 
-Put the result in ./overview-analysis.md, on branch nsa-overview-analysis
+Look at the README.md and docs/overview.md, and overview-analysis.md for background
 
 ## TODO
