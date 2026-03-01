@@ -78,6 +78,51 @@ describe("brint", () => {
       assert.deepEqual(parent.children, [child1, child3])
       assert.equal(child2.parent, null)
     })
+
+    it("should find previous DOM node through nested fragments", () => {
+      // Simulate: div > [fragmentA > [span, fragmentB > [target]]]
+      // When finding previous DOM node for target, should find span
+
+      const divNode = new RenderNode(["div"])
+      const divDom = document.createElement("div")
+      divNode.node = divDom
+
+      const fragmentA = new RenderNode(null) // fragment has no DOM node
+      divNode.appendChild(fragmentA)
+
+      const spanNode = new RenderNode(["span"])
+      const spanDom = document.createElement("span")
+      spanNode.node = spanDom
+      fragmentA.appendChild(spanNode)
+
+      const fragmentB = new RenderNode(null) // nested fragment, no DOM node
+      fragmentA.appendChild(fragmentB)
+
+      const target = new RenderNode(["p"])
+      fragmentB.appendChild(target)
+
+      // target has no prev sibling at its level, but should find span
+      // by walking up through fragmentB to fragmentA's previous sibling
+      const prevDom = target.findPreviousDomNode()
+      assert.equal(prevDom, spanDom)
+    })
+
+    it("should return null when no previous DOM node exists", () => {
+      const divNode = new RenderNode(["div"])
+      const divDom = document.createElement("div")
+      divNode.node = divDom
+
+      const fragment = new RenderNode(null)
+      divNode.appendChild(fragment)
+
+      const target = new RenderNode(["p"])
+      fragment.appendChild(target)
+
+      // target is first child of fragment, and fragment is first child of div
+      // div has a DOM node, so we stop there - no previous DOM node
+      const prevDom = target.findPreviousDomNode()
+      assert.equal(prevDom, null)
+    })
   })
 
   describe("render", () => {

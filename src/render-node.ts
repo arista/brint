@@ -98,7 +98,8 @@ export class RenderNode {
   /**
    * Find the DOM node that should come before this node's DOM node(s)
    * when inserting into the parent. This handles cases where previous
-   * siblings may have no DOM node (like NullRenderSpec).
+   * siblings may have no DOM node (like NullRenderSpec), and also
+   * handles nested fragments by walking up through DOM-less ancestors.
    */
   findPreviousDomNode(): Node | null {
     // Walk backwards through siblings to find one with a DOM node
@@ -110,6 +111,13 @@ export class RenderNode {
       }
       sibling = sibling.prev
     }
+
+    // Nothing at this level - check parent's previous siblings
+    // (but only if parent has no DOM node, i.e., is a fragment/function/etc.)
+    if (this.parent && !this.parent.node) {
+      return this.parent.findPreviousDomNode()
+    }
+
     return null
   }
 
