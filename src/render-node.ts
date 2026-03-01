@@ -74,8 +74,9 @@ export class RenderNode {
       this.node.parentNode.removeChild(this.node)
     }
 
-    // Recursively remove children
-    for (const child of this.children) {
+    // Recursively remove children (copy array since remove() modifies it)
+    const childrenToRemove = [...this.children]
+    for (const child of childrenToRemove) {
       child.remove()
     }
     this.children = []

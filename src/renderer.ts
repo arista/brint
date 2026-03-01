@@ -3,6 +3,7 @@ import type {
   ElementRenderSpec,
   ElementArgs,
   ElementChildRenderSpecs,
+  FragmentRenderSpec,
 } from "./index.js"
 import { RenderNode } from "./render-node.js"
 
@@ -26,6 +27,14 @@ function isTextRenderSpec(spec: RenderSpec): spec is string | number {
  */
 function isElementRenderSpec(spec: RenderSpec): spec is ElementRenderSpec {
   return Array.isArray(spec) && typeof spec[0] === "string"
+}
+
+/**
+ * Check if a value is a FragmentRenderSpec
+ * FragmentRenderSpec is an array where the first element is null
+ */
+function isFragmentRenderSpec(spec: RenderSpec): spec is FragmentRenderSpec {
+  return Array.isArray(spec) && spec[0] === null
 }
 
 /**
@@ -375,8 +384,24 @@ export function render(
     return renderNode
   }
 
-  // For Phase 2, we don't handle FunctionRenderSpec, ComponentRenderSpec,
-  // FragmentRenderSpec, or ListRenderSpec yet.
+  if (isFragmentRenderSpec(spec)) {
+    // FragmentRenderSpec: no DOM node, but children become siblings in parent's DOM
+    // The spec is [null, ...children]
+    const childSpecs = spec.slice(1) as RenderSpec[]
+
+    // Find the actual parent DOM node by walking up through DOM-less ancestors
+    const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
+
+    // Render each child
+    for (const childSpec of childSpecs) {
+      render(childSpec, renderNode, actualParentDomNode, xmlns)
+    }
+
+    return renderNode
+  }
+
+  // For now, we don't handle FunctionRenderSpec, ComponentRenderSpec,
+  // or ListRenderSpec yet.
   // Just return an empty RenderNode.
   return renderNode
 }
