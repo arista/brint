@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Implement Phase 3 on branch nsa-phase-3
+Implement Phase 4 on branch nsa-phase-4
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -24,13 +24,13 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~ElementRenderSpec → Element (static attributes only, no reactivity)~~
 - ~~Basic tree structure (parent/children/prev/next)~~
 
-### Phase 3: Element Details (Static)
+### Phase 3: Element Details (Static) (COMPLETE)
 
-- Normal attributes
-- Style handling
-- Event listeners (`on`)
-- Properties
-- xmlns handling and inheritance
+- ~~Normal attributes~~
+- ~~Style handling~~
+- ~~Event listeners (`on`)~~
+- ~~Properties~~
+- ~~xmlns handling and inheritance~~
 
 ### Phase 4: Fragments and Children
 
