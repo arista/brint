@@ -525,5 +525,180 @@ describe("brint", () => {
         assert.equal(container.childNodes.length, 0)
       })
     })
+
+    describe("FragmentRenderSpec", () => {
+      it("should render a simple fragment with children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render([null, ["span", "first"], ["span", "second"]], container)
+
+        assert.equal(container.childNodes.length, 2)
+        assert.equal((container.childNodes[0] as Element).tagName, "SPAN")
+        assert.equal((container.childNodes[0] as Element).textContent, "first")
+        assert.equal((container.childNodes[1] as Element).tagName, "SPAN")
+        assert.equal((container.childNodes[1] as Element).textContent, "second")
+      })
+
+      it("should render an empty fragment", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render([null], container)
+
+        assert.equal(container.childNodes.length, 0)
+      })
+
+      it("should render fragment at the beginning of element children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          ["div", {}, [[null, ["span", "a"], ["span", "b"]], ["p", "c"]]],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        assert.equal(div.childNodes.length, 3)
+        assert.equal((div.childNodes[0] as Element).tagName, "SPAN")
+        assert.equal((div.childNodes[0] as Element).textContent, "a")
+        assert.equal((div.childNodes[1] as Element).tagName, "SPAN")
+        assert.equal((div.childNodes[1] as Element).textContent, "b")
+        assert.equal((div.childNodes[2] as Element).tagName, "P")
+        assert.equal((div.childNodes[2] as Element).textContent, "c")
+      })
+
+      it("should render fragment in the middle of element children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          ["div", {}, [["p", "before"], [null, ["span", "a"], ["span", "b"]], ["p", "after"]]],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        assert.equal(div.childNodes.length, 4)
+        assert.equal((div.childNodes[0] as Element).tagName, "P")
+        assert.equal((div.childNodes[0] as Element).textContent, "before")
+        assert.equal((div.childNodes[1] as Element).tagName, "SPAN")
+        assert.equal((div.childNodes[1] as Element).textContent, "a")
+        assert.equal((div.childNodes[2] as Element).tagName, "SPAN")
+        assert.equal((div.childNodes[2] as Element).textContent, "b")
+        assert.equal((div.childNodes[3] as Element).tagName, "P")
+        assert.equal((div.childNodes[3] as Element).textContent, "after")
+      })
+
+      it("should render fragment at the end of element children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          ["div", {}, [["p", "before"], [null, ["span", "a"], ["span", "b"]]]],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        assert.equal(div.childNodes.length, 3)
+        assert.equal((div.childNodes[0] as Element).tagName, "P")
+        assert.equal((div.childNodes[1] as Element).tagName, "SPAN")
+        assert.equal((div.childNodes[2] as Element).tagName, "SPAN")
+      })
+
+      it("should render nested fragments", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        // [null, span-a, [null, span-b, span-c], span-d]
+        brint.render(
+          [null, ["span", "a"], [null, ["span", "b"], ["span", "c"]], ["span", "d"]],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 4)
+        assert.equal((container.childNodes[0] as Element).textContent, "a")
+        assert.equal((container.childNodes[1] as Element).textContent, "b")
+        assert.equal((container.childNodes[2] as Element).textContent, "c")
+        assert.equal((container.childNodes[3] as Element).textContent, "d")
+      })
+
+      it("should handle fragment with null children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render([null, ["span", "a"], null, ["span", "b"]], container)
+
+        assert.equal(container.childNodes.length, 2)
+        assert.equal((container.childNodes[0] as Element).textContent, "a")
+        assert.equal((container.childNodes[1] as Element).textContent, "b")
+      })
+
+      it("should handle fragment with text children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render([null, "hello", " ", "world"], container)
+
+        assert.equal(container.childNodes.length, 3)
+        assert.equal(container.textContent, "hello world")
+      })
+
+      it("should handle deeply nested fragments", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        // Three levels of nesting
+        brint.render(
+          [
+            "div",
+            {},
+            [
+              [null, ["span", "1"], [null, ["span", "2"], [null, ["span", "3"]]]],
+            ],
+          ],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        assert.equal(div.childNodes.length, 3)
+        assert.equal((div.childNodes[0] as Element).textContent, "1")
+        assert.equal((div.childNodes[1] as Element).textContent, "2")
+        assert.equal((div.childNodes[2] as Element).textContent, "3")
+      })
+
+      it("should inherit xmlns through fragments", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            "svg",
+            { xmlns: "http://www.w3.org/2000/svg" },
+            [[null, ["circle", { r: "10" }], ["rect", { width: "20" }]]],
+          ],
+          container,
+        )
+
+        const svg = container.firstChild as SVGElement
+        const circle = svg.childNodes[0] as SVGElement
+        const rect = svg.childNodes[1] as SVGElement
+
+        assert.equal(circle.namespaceURI, "http://www.w3.org/2000/svg")
+        assert.equal(rect.namespaceURI, "http://www.w3.org/2000/svg")
+      })
+
+      it("should unmount fragment and remove all children", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const handle = brint.render([null, ["span", "a"], ["span", "b"]], container)
+
+        assert.equal(container.childNodes.length, 2)
+
+        handle.unmount()
+
+        assert.equal(container.childNodes.length, 0)
+      })
+    })
   })
 })
