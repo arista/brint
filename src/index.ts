@@ -1,4 +1,9 @@
 import type { ChangeDomain } from "chchchchanges"
+import { RenderNode } from "./render-node.js"
+import { render as renderSpec, unmount as unmountRenderNode } from "./renderer.js"
+
+// Re-export RenderNode for external use
+export { RenderNode }
 
 // ============================================================================
 // Symbols
@@ -152,11 +157,17 @@ export function create(config: BrintConfig): Brint {
   const { changeDomain: _changeDomain } = config
 
   return {
-    render(_spec: RenderSpec, _element: Element): RenderHandle {
-      // TODO: Implement rendering
+    render(spec: RenderSpec, element: Element): RenderHandle {
+      // Create a root RenderNode that wraps the container element
+      const rootRenderNode = new RenderNode(null)
+      rootRenderNode.node = element
+
+      // Render the spec as a child of the root
+      const childRenderNode = renderSpec(spec, rootRenderNode, element, null)
+
       return {
         unmount() {
-          // TODO: Implement unmount
+          unmountRenderNode(childRenderNode)
         },
       }
     },

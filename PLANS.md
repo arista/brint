@@ -6,6 +6,8 @@ This document tracks the roadmap and planned features for brint
 
 Phase 2: Basic Static Rendering
 
+please implement on branch nsa-phase-2
+
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
 ## Implementation Plan
