@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Implement Phase 6 on branch nsa-phase-6
+Phase 7 (ComponentRenderSpec) is next.
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -46,11 +46,11 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~Reactive attributes, styles, properties~~
 - ~~Cleanup (remove CachedFunctions on RenderNode removal)~~
 
-### Phase 6: FunctionRenderSpec
+### Phase 6: FunctionRenderSpec (COMPLETE)
 
-- Wrap in CachedFunction
-- Re-render child on invalidation
-- Basic reconciliation (same type → reuse, different → replace)
+- ~~Wrap in CachedFunction~~
+- ~~Re-render child on invalidation~~
+- ~~Basic reconciliation (same type → reuse, different → replace)~~
 
 ### Phase 7: ComponentRenderSpec
 
