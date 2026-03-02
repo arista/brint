@@ -73,6 +73,9 @@ export class RenderNode {
   /** Reactive properties (only populated if there are reactive values) */
   reactiveProperties: Map<string | symbol, RenderNodeProperty> | null = null
 
+  /** CachedFunction for FunctionRenderSpec nodes */
+  functionCachedFunction: CachedFunction<unknown> | null = null
+
   /** All CachedFunctions to clean up when this node is removed */
   private cleanupFunctions: Array<CachedFunction<unknown>> = []
 
@@ -139,6 +142,12 @@ export class RenderNode {
     this.reactiveAttributes = null
     this.reactiveStyles = null
     this.reactiveProperties = null
+
+    // Clean up function CachedFunction
+    if (this.functionCachedFunction) {
+      this.functionCachedFunction.remove()
+      this.functionCachedFunction = null
+    }
 
     // Recursively remove children (copy array since remove() modifies it)
     const childrenToRemove = [...this.children]
