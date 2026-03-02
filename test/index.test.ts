@@ -133,6 +133,11 @@ describe("brint", () => {
       document.body.appendChild(container)
     })
 
+    afterEach(() => {
+      // Clear container to help with cleanup
+      container.innerHTML = ""
+    })
+
     describe("NullRenderSpec", () => {
       it("should render null as empty", () => {
         const domain = new ChangeDomain()
@@ -929,6 +934,157 @@ describe("brint", () => {
         state.b = "bbb"
         assert.equal(callCountA, 2)
         assert.equal(callCountB, 2)
+      })
+    })
+
+    describe("FunctionRenderSpec", () => {
+      it("should render a function that returns an element", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(() => ["div", "hello"], container)
+
+        assert.equal(container.childNodes.length, 1)
+        const div = container.firstChild as Element
+        assert.equal(div.tagName, "DIV")
+        assert.equal(div.textContent, "hello")
+      })
+
+      it("should render a function that returns text", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(() => "hello world", container)
+
+        assert.equal(container.childNodes.length, 1)
+        assert.equal(container.textContent, "hello world")
+      })
+
+      it("should render a function that returns null", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(() => null, container)
+
+        assert.equal(container.childNodes.length, 0)
+      })
+
+      it("should re-render when reactive dependencies change", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ count: 0 })
+
+        brint.render(() => ["span", String(state.count)], container)
+
+        const span = container.firstChild as Element
+        assert.equal(span.textContent, "0")
+
+        // Update the state
+        state.count = 42
+
+        // The content should be updated
+        // Note: We don't assert element identity because comparing DOM elements with
+        // assert.equal causes infinite loops due to circular parent/child references
+        // in happy-dom. The element may or may not be reused depending on reconciliation.
+        assert.equal((container.firstChild as Element).textContent, "42")
+      })
+
+      it("should update text content when returning different text", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ message: "hello" })
+
+        brint.render(() => state.message, container)
+
+        assert.equal(container.textContent, "hello")
+
+        // Update the state
+        state.message = "world"
+
+        // The text should be updated
+        assert.equal(container.textContent, "world")
+      })
+
+      it("should replace element when tag changes", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ useDiv: true })
+
+        brint.render(() => (state.useDiv ? ["div", "content"] : ["span", "content"]), container)
+
+        assert.equal((container.firstChild as Element).tagName, "DIV")
+
+        // Change tag
+        state.useDiv = false
+
+        assert.equal((container.firstChild as Element).tagName, "SPAN")
+      })
+
+      it("should handle function returning element with nested function via fragment", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ value: "test" })
+
+        // Use fragment syntax [null, ...children] to embed a function
+        brint.render(
+          () => ["div", {}, [null, () => ["span", state.value]]],
+          container,
+        )
+
+        const div = container.firstChild as Element
+        const span = div.firstChild as Element
+        assert.equal(span.tagName, "SPAN")
+        assert.equal(span.textContent, "test")
+
+        // Update state
+        state.value = "updated"
+
+        assert.equal((div.firstChild as Element).textContent, "updated")
+      })
+
+      it("should cleanup function CachedFunction on unmount", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ value: "test" })
+        let callCount = 0
+
+        const handle = brint.render(() => {
+          callCount++
+          return ["div", state.value]
+        }, container)
+
+        assert.equal(callCount, 1)
+
+        // Update should trigger re-render
+        state.value = "updated"
+        assert.equal(callCount, 2)
+
+        // Unmount
+        handle.unmount()
+
+        // After unmount, updates should NOT trigger re-render
+        state.value = "after unmount"
+        assert.equal(callCount, 2)
+      })
+
+      it("should pass RenderContext to function", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        let receivedCtx: unknown = null
+
+        brint.render((ctx) => {
+          receivedCtx = ctx
+          return ["div", "test"]
+        }, container)
+
+        assert.notEqual(receivedCtx, null)
+        assert.equal(typeof receivedCtx, "object")
       })
     })
   })

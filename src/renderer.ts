@@ -5,6 +5,8 @@ import type {
   ElementArgs,
   ElementChildRenderSpecs,
   FragmentRenderSpec,
+  FunctionRenderSpec,
+  RenderContext,
 } from "./index.js"
 import { RenderNode, type ReactiveElementValue } from "./render-node.js"
 
@@ -44,6 +46,14 @@ function isElementRenderSpec(spec: RenderSpec): spec is ElementRenderSpec {
  */
 function isFragmentRenderSpec(spec: RenderSpec): spec is FragmentRenderSpec {
   return Array.isArray(spec) && spec[0] === null
+}
+
+/**
+ * Check if a value is a FunctionRenderSpec
+ * FunctionRenderSpec is a function (not in an array)
+ */
+function isFunctionRenderSpec(spec: RenderSpec): spec is FunctionRenderSpec {
+  return typeof spec === "function"
 }
 
 /**
@@ -611,8 +621,31 @@ export function render(
     return renderNode
   }
 
-  // For now, we don't handle FunctionRenderSpec, ComponentRenderSpec,
-  // or ListRenderSpec yet.
+  if (isFunctionRenderSpec(spec)) {
+    // FunctionRenderSpec: wrap function in CachedFunction, render result as child
+    const ctx: RenderContext = {}
+
+    // Find the actual parent DOM node for child insertion
+    const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
+
+    // Create CachedFunction wrapping the render function
+    const cf = domain.createCachedFunction(() => spec(ctx))
+    renderNode.functionCachedFunction = cf
+
+    // Execute function and render the result
+    const childSpec = cf.call() as RenderSpec
+    render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+
+    // Set up listener for re-rendering on invalidation
+    cf.addListener(() => {
+      const newChildSpec = cf.call() as RenderSpec
+      renderOver(newChildSpec, renderNode, actualParentDomNode, xmlns, domain)
+    })
+
+    return renderNode
+  }
+
+  // For now, we don't handle ComponentRenderSpec or ListRenderSpec yet.
   // Just return an empty RenderNode.
   return renderNode
 }
@@ -638,6 +671,129 @@ function insertDomNode(renderNode: RenderNode, parentDomNode: Node): void {
     } else {
       parentDomNode.appendChild(domNode)
     }
+  }
+}
+
+/**
+ * Render a new RenderSpec over an existing RenderNode's children.
+ * This implements basic reconciliation - reusing nodes where possible.
+ *
+ * @param spec The new RenderSpec to render
+ * @param parentNode The parent RenderNode (whose children will be updated)
+ * @param parentDomNode The parent DOM node for insertion
+ * @param xmlns The inherited XML namespace
+ * @param domain The ChangeDomain for reactive values
+ */
+function renderOver(
+  spec: RenderSpec,
+  parentNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  const existingChild = parentNode.children[0]
+
+  // If we can reconcile with the existing child, do so
+  if (existingChild && canReconcile(spec, existingChild)) {
+    reconcile(spec, existingChild, parentDomNode, xmlns, domain)
+    return
+  }
+
+  // Otherwise, remove all existing children and render fresh
+  const childrenToRemove = [...parentNode.children]
+  for (const child of childrenToRemove) {
+    child.remove()
+  }
+
+  // Render the new spec
+  render(spec, parentNode, parentDomNode, xmlns, domain)
+}
+
+/**
+ * Check if a new RenderSpec can be reconciled with an existing RenderNode.
+ * Returns true if they are the same "type" and can be reused.
+ */
+function canReconcile(spec: RenderSpec, existingNode: RenderNode): boolean {
+  const existingSpec = existingNode.spec
+
+  // NullRenderSpec can reconcile with NullRenderSpec
+  if (isNullRenderSpec(spec) && isNullRenderSpec(existingSpec)) {
+    return true
+  }
+
+  // TextRenderSpec can reconcile with TextRenderSpec
+  if (isTextRenderSpec(spec) && isTextRenderSpec(existingSpec)) {
+    return true
+  }
+
+  // ElementRenderSpec can reconcile with same tag/namespace ElementRenderSpec
+  if (isElementRenderSpec(spec) && isElementRenderSpec(existingSpec)) {
+    const newParsed = parseElementRenderSpec(spec)
+    const existingParsed = parseElementRenderSpec(existingSpec)
+
+    // Same tag name
+    if (newParsed.tagName !== existingParsed.tagName) {
+      return false
+    }
+
+    // Same namespace (check xmlns from args)
+    const newXmlns = newParsed.args?.xmlns
+    const existingXmlns = existingParsed.args?.xmlns
+    if (newXmlns !== existingXmlns) {
+      return false
+    }
+
+    return true
+  }
+
+  // FunctionRenderSpec, FragmentRenderSpec, etc. - DOM-less nodes can reconcile
+  // with other DOM-less nodes of the same type
+  if (isFunctionRenderSpec(spec) && isFunctionRenderSpec(existingSpec)) {
+    return true
+  }
+
+  if (isFragmentRenderSpec(spec) && isFragmentRenderSpec(existingSpec)) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Reconcile a RenderSpec with an existing RenderNode, updating in place.
+ */
+function reconcile(
+  spec: RenderSpec,
+  existingNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  // Update the spec reference
+  existingNode.spec = spec
+
+  // Handle based on type
+  if (isNullRenderSpec(spec)) {
+    // NullRenderSpec: nothing to update
+    return
+  }
+
+  if (isTextRenderSpec(spec)) {
+    // TextRenderSpec: update the text content
+    const newText = typeof spec === "number" ? String(spec) : spec
+    if (existingNode.node) {
+      existingNode.node.textContent = newText
+    }
+    return
+  }
+
+  // For now, other types (Element, Function, Fragment) get full replacement
+  // Phase 10 will implement full attribute reconciliation for elements
+  // For Phase 6, just remove and re-render for complex cases
+  const parent = existingNode.parent
+  if (parent) {
+    existingNode.remove()
+    render(spec, parent, parentDomNode, xmlns, domain)
   }
 }
 
