@@ -392,75 +392,6 @@ function applyStyles(
 }
 
 /**
- * Apply attributes to a DOM element (static, non-reactive version).
- * Used when no ChangeDomain is provided.
- */
-function applyAttributesStatic(element: Element, args: ElementArgs): void {
-  for (const [key, value] of Object.entries(args)) {
-    // Skip special keys - handled separately
-    if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
-      continue
-    }
-
-    // Skip functions - they require a ChangeDomain for reactivity
-    if (typeof value === "function") {
-      continue
-    }
-
-    applyAttributeValue(element, key, value as ReactiveElementValue)
-  }
-}
-
-/**
- * Apply styles to a DOM element (static, non-reactive version).
- * Used when no ChangeDomain is provided.
- */
-function applyStylesStatic(element: Element, styles: Record<string, unknown>): void {
-  const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
-  if (!elementWithStyle.style) {
-    return
-  }
-
-  for (const [property, value] of Object.entries(styles)) {
-    // Skip functions - they require a ChangeDomain for reactivity
-    if (typeof value === "function") {
-      continue
-    }
-
-    applyStyleValue(
-      elementWithStyle as Element & { style: CSSStyleDeclaration },
-      property,
-      value as ReactiveElementValue,
-    )
-  }
-}
-
-/**
- * Apply properties to a DOM element (static, non-reactive version).
- * Used when no ChangeDomain is provided.
- */
-function applyPropertiesStatic(element: Element, properties: Record<string | symbol, unknown>): void {
-  for (const [key, value] of Object.entries(properties)) {
-    // Skip functions - they require a ChangeDomain for reactivity
-    if (typeof value === "function") {
-      continue
-    }
-    applyPropertyValue(element, key, value)
-  }
-
-  // Handle symbol keys
-  const symbolKeys = Object.getOwnPropertySymbols(properties)
-  for (const key of symbolKeys) {
-    const value = properties[key]
-    // Skip functions
-    if (typeof value === "function") {
-      continue
-    }
-    applyPropertyValue(element, key, value)
-  }
-}
-
-/**
  * Apply event listeners to a DOM element.
  * Supports both simple functions and objects with listener + options.
  */
@@ -580,10 +511,10 @@ function applyProperties(
  */
 export function render(
   spec: RenderSpec,
-  parentNode: RenderNode | null = null,
-  parentDomNode: Node | null = null,
-  xmlns: string | null = null,
-  domain: ChangeDomain | null = null,
+  parentNode: RenderNode | null,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
 ): RenderNode {
   const renderNode = new RenderNode(spec)
   renderNode.xmlns = xmlns
@@ -633,34 +564,18 @@ export function render(
 
     // Apply attributes, styles, event listeners, and properties
     if (args) {
-      if (domain) {
-        applyAttributes(element, args, domain, renderNode)
-      } else {
-        // Fallback for non-reactive rendering (no domain provided)
-        applyAttributesStatic(element, args)
-      }
+      applyAttributes(element, args, domain, renderNode)
 
-      // Apply styles
       if (args.style) {
-        if (domain) {
-          applyStyles(element, args.style, domain, renderNode)
-        } else {
-          applyStylesStatic(element, args.style)
-        }
+        applyStyles(element, args.style, domain, renderNode)
       }
 
-      // Apply event listeners (never reactive)
       if (args.on) {
         applyEventListeners(element, args.on)
       }
 
-      // Apply properties
       if (args.properties) {
-        if (domain) {
-          applyProperties(element, args.properties, domain, renderNode)
-        } else {
-          applyPropertiesStatic(element, args.properties)
-        }
+        applyProperties(element, args.properties, domain, renderNode)
       }
     }
 
