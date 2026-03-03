@@ -109,6 +109,15 @@ export class RenderNode {
   /** Current list items array (for unsubscribing and surgical updates) */
   list: unknown[] | null = null
 
+  /** RenderContext state (change-enabled application data) */
+  contextState: unknown = null
+
+  /** Registered onMount callbacks (called after children are rendered) */
+  onMountCallbacks: Array<(node: Node | null) => void | (() => void)> | null = null
+
+  /** Cleanup callbacks returned from onMount (called during removal) */
+  lifecycleCleanups: Array<() => void> | null = null
+
   /** All CachedFunctions to clean up when this node is removed */
   private cleanupFunctions: Array<CachedFunction<unknown>> = []
 
@@ -213,6 +222,23 @@ export class RenderNode {
     this.prev = null
     this.next = null
 
+    // Recursively remove children first (bottom-up cleanup order)
+    const childrenToRemove = [...this.children]
+    for (const child of childrenToRemove) {
+      child.remove()
+    }
+    this.children = []
+
+    // Call lifecycle cleanup callbacks (after children have cleaned up)
+    if (this.lifecycleCleanups) {
+      for (const cleanup of this.lifecycleCleanups) {
+        cleanup()
+      }
+      this.lifecycleCleanups = null
+    }
+    this.onMountCallbacks = null
+    this.contextState = null
+
     // Remove DOM node if present
     if (this.node && this.node.parentNode) {
       this.node.parentNode.removeChild(this.node)
@@ -254,13 +280,6 @@ export class RenderNode {
     // Note: listItemsListener unsubscribe is handled by the renderer before calling remove()
     this.listItemsListener = null
     this.list = null
-
-    // Recursively remove children (copy array since remove() modifies it)
-    const childrenToRemove = [...this.children]
-    for (const child of childrenToRemove) {
-      child.remove()
-    }
-    this.children = []
   }
 
   /**

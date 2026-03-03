@@ -2201,5 +2201,252 @@ describe("brint", () => {
         })
       })
     })
+
+    describe("RenderContext", () => {
+      let container: HTMLDivElement
+
+      beforeEach(() => {
+        container = document.createElement("div")
+        document.body.appendChild(container)
+      })
+
+      afterEach(() => {
+        container.remove()
+      })
+
+      describe("state", () => {
+        it("should provide change-enabled state", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          let renderCount = 0
+          brint.render(
+            (ctx) => {
+              renderCount++
+              if (renderCount === 1) {
+                ctx.state = { count: 0 }
+              }
+              return ["div", () => `Count: ${ctx.state.count}`]
+            },
+            container,
+          )
+
+          assert.equal(renderCount, 1)
+          assert.equal(container.textContent, "Count: 0")
+        })
+
+        it("should trigger re-render when state changes", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          let savedCtx: { state: { count: number } } | null = null
+          let renderCount = 0
+
+          brint.render(
+            (ctx) => {
+              renderCount++
+              if (!savedCtx) {
+                ctx.state = { count: 0 }
+                savedCtx = ctx as { state: { count: number } }
+              }
+              return ["div", () => `Count: ${ctx.state.count}`]
+            },
+            container,
+          )
+
+          assert.equal(renderCount, 1)
+          assert.equal(container.textContent, "Count: 0")
+
+          // Mutate state - should trigger re-render of reactive child
+          savedCtx!.state.count = 5
+          assert.equal(container.textContent, "Count: 5")
+        })
+      })
+
+      describe("onMount", () => {
+        it("should call onMount after rendering", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          let mountCalled = false
+          let nodeReceived: Node | null = null
+
+          brint.render(
+            (ctx) => {
+              ctx.onMount((node) => {
+                mountCalled = true
+                nodeReceived = node
+              })
+              return ["div", "hello"]
+            },
+            container,
+          )
+
+          assert.equal(mountCalled, true)
+          // FunctionRenderSpec has no DOM node, so node should be null
+          assert.equal(nodeReceived, null)
+        })
+
+        it("should call onMount after children are rendered (bottom-up)", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const callOrder: string[] = []
+
+          const ChildComponent = () => {
+            return (ctx) => {
+              ctx.onMount(() => {
+                callOrder.push("child")
+              })
+              return ["span", "child"]
+            }
+          }
+
+          brint.render(
+            (ctx) => {
+              ctx.onMount(() => {
+                callOrder.push("parent")
+              })
+              return [null, [ChildComponent]]
+            },
+            container,
+          )
+
+          // Child's onMount should fire before parent's
+          assert.deepEqual(callOrder, ["child", "parent"])
+        })
+
+        it("should call cleanup function on unmount", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          let cleanupCalled = false
+
+          const handle = brint.render(
+            (ctx) => {
+              ctx.onMount(() => {
+                return () => {
+                  cleanupCalled = true
+                }
+              })
+              return ["div", "hello"]
+            },
+            container,
+          )
+
+          assert.equal(cleanupCalled, false)
+
+          handle.unmount()
+
+          assert.equal(cleanupCalled, true)
+        })
+
+        it("should call cleanup in bottom-up order", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const cleanupOrder: string[] = []
+
+          const ChildComponent = () => {
+            return (ctx) => {
+              ctx.onMount(() => {
+                return () => {
+                  cleanupOrder.push("child")
+                }
+              })
+              return ["span", "child"]
+            }
+          }
+
+          const handle = brint.render(
+            (ctx) => {
+              ctx.onMount(() => {
+                return () => {
+                  cleanupOrder.push("parent")
+                }
+              })
+              return [null, [ChildComponent]]
+            },
+            container,
+          )
+
+          handle.unmount()
+
+          // Children cleanup before parent
+          assert.deepEqual(cleanupOrder, ["child", "parent"])
+        })
+      })
+
+      describe("reconciliation", () => {
+        it("should call cleanup then onMount during reconciliation", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const events: string[] = []
+          const state = domain.enableChanges({ value: 1 })
+
+          // The outer function reads state.value to create a dependency
+          // This ensures reconciliation happens when state.value changes
+          brint.render(
+            () => {
+              const currentValue = state.value // Create dependency on state.value
+              return (ctx) => {
+                ctx.onMount(() => {
+                  events.push(`mount:${currentValue}`)
+                  return () => {
+                    events.push(`cleanup:${currentValue}`)
+                  }
+                })
+                return ["div", `Value: ${currentValue}`]
+              }
+            },
+            container,
+          )
+
+          assert.deepEqual(events, ["mount:1"])
+
+          // Trigger reconciliation by changing state.value
+          // The outer function will re-run, returning a new inner FunctionRenderSpec
+          // This causes reconciliation of the inner function
+          state.value = 2
+
+          // Should have called cleanup for old (with old value), then mount for new
+          assert.deepEqual(events, ["mount:1", "cleanup:1", "mount:2"])
+        })
+
+        it("should reset state during reconciliation", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const stateValues: number[] = []
+          const trigger = domain.enableChanges({ version: 1 })
+
+          // The outer function reads trigger.version to create a dependency
+          brint.render(
+            () => {
+              const version = trigger.version // Create dependency
+              return (ctx) => {
+                if (!ctx.state || ctx.state.initialized !== true) {
+                  ctx.state = { initialized: true, value: version * 10 }
+                }
+                stateValues.push(ctx.state.value)
+                return ["div", `State: ${ctx.state.value}`]
+              }
+            },
+            container,
+          )
+
+          assert.deepEqual(stateValues, [10])
+          assert.equal(container.textContent, "State: 10")
+
+          // Trigger reconciliation
+          trigger.version = 2
+
+          // State should have been reset
+          assert.deepEqual(stateValues, [10, 20])
+          assert.equal(container.textContent, "State: 20")
+        })
+      })
+    })
   })
 })

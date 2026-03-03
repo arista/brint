@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-In [design](./docs/design.md), I've started thinking about the RenderContext.  I wonder what your thoughts are as to what makes sense here.  What lifecycle notifications would make sense in this system?  Is there terminology that should be reused from other systems?
+Implement the RenderContext behavior in [design](./docs/design.md)
 
 ## Docs and references
 
