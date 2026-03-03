@@ -680,6 +680,8 @@ export function render(
     const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
     const childSpec = setupFunctionSpec(renderNode, spec, actualParentDomNode, xmlns, domain)
     render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+    // Call onMount callbacks after children are rendered (bottom-up order)
+    callOnMountCallbacks(renderNode)
     return renderNode
   }
 
@@ -688,6 +690,8 @@ export function render(
     const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
     const childSpec = setupComponentSpec(renderNode, spec, actualParentDomNode, xmlns, domain)
     render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+    // Call onMount callbacks after children are rendered (bottom-up order)
+    callOnMountCallbacks(renderNode)
     return renderNode
   }
 
@@ -1168,6 +1172,49 @@ function clearReactiveState(node: RenderNode): void {
 }
 
 /**
+ * Create a RenderContext for a RenderNode.
+ * The state is change-enabled via the ChangeDomain.
+ */
+function createRenderContext(renderNode: RenderNode, domain: ChangeDomain): RenderContext {
+  // Initialize state as change-enabled
+  renderNode.contextState = domain.enableChanges({}, `RenderContext.state`)
+
+  return {
+    get state() {
+      return renderNode.contextState
+    },
+    set state(value: unknown) {
+      renderNode.contextState = domain.enableChanges(value, `RenderContext.state`)
+    },
+    onMount(callback: (node: Node | null) => void | (() => void)) {
+      if (!renderNode.onMountCallbacks) {
+        renderNode.onMountCallbacks = []
+      }
+      renderNode.onMountCallbacks.push(callback)
+    },
+  }
+}
+
+/**
+ * Call all registered onMount callbacks for a RenderNode.
+ * Should be called after children are rendered (bottom-up order).
+ * Stores any returned cleanup functions.
+ */
+function callOnMountCallbacks(renderNode: RenderNode): void {
+  if (!renderNode.onMountCallbacks) return
+
+  for (const callback of renderNode.onMountCallbacks) {
+    const cleanup = callback(renderNode.node)
+    if (typeof cleanup === "function") {
+      if (!renderNode.lifecycleCleanups) {
+        renderNode.lifecycleCleanups = []
+      }
+      renderNode.lifecycleCleanups.push(cleanup)
+    }
+  }
+}
+
+/**
  * Set up a FunctionRenderSpec on a RenderNode.
  * Creates the CachedFunction, sets up the re-render listener, and returns the initial child spec.
  * This is shared between initial render and reconciliation.
@@ -1179,7 +1226,7 @@ function setupFunctionSpec(
   xmlns: string | null,
   domain: ChangeDomain,
 ): RenderSpec {
-  const ctx: RenderContext = {}
+  const ctx = createRenderContext(renderNode, domain)
 
   // Create CachedFunction wrapping the render function
   const cf = domain.createCachedFunction(() => spec(ctx))
@@ -1210,7 +1257,7 @@ function setupComponentSpec(
   domain: ChangeDomain,
 ): RenderSpec {
   const [componentFn, componentArgs] = spec
-  const ctx: RenderContext = {}
+  const ctx = createRenderContext(renderNode, domain)
 
   // Process component props - wrap functions in CachedFunctions (except "on")
   const staticProps: Record<string, unknown> = {}
@@ -1507,6 +1554,21 @@ function setupListSpec(
 /**
  * Reconcile a FunctionRenderSpec with an existing function RenderNode
  */
+/**
+ * Call lifecycle cleanup callbacks for a RenderNode during reconciliation.
+ * This is the "unmount" part of reconciliation.
+ */
+function callLifecycleCleanups(node: RenderNode): void {
+  if (node.lifecycleCleanups) {
+    for (const cleanup of node.lifecycleCleanups) {
+      cleanup()
+    }
+    node.lifecycleCleanups = null
+  }
+  node.onMountCallbacks = null
+  node.contextState = null
+}
+
 function reconcileFunctionSpec(
   spec: FunctionRenderSpec,
   existingNode: RenderNode,
@@ -1514,6 +1576,9 @@ function reconcileFunctionSpec(
   xmlns: string | null,
   domain: ChangeDomain,
 ): void {
+  // Call lifecycle cleanups (unmount part of reconciliation)
+  callLifecycleCleanups(existingNode)
+
   // Clean up old CachedFunction
   if (existingNode.functionCachedFunction) {
     existingNode.functionCachedFunction.remove()
@@ -1534,6 +1599,9 @@ function reconcileFunctionSpec(
     cleanupLeftoverChildren(existingNode, 0)
     render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
   }
+
+  // Call onMount callbacks (mount part of reconciliation)
+  callOnMountCallbacks(existingNode)
 }
 
 /**
@@ -1546,6 +1614,9 @@ function reconcileComponentSpec(
   xmlns: string | null,
   domain: ChangeDomain,
 ): void {
+  // Call lifecycle cleanups (unmount part of reconciliation)
+  callLifecycleCleanups(existingNode)
+
   // Clean up old component state
   if (existingNode.componentProps) {
     for (const prop of existingNode.componentProps.values()) {
@@ -1571,6 +1642,9 @@ function reconcileComponentSpec(
     cleanupLeftoverChildren(existingNode, 0)
     render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
   }
+
+  // Call onMount callbacks (mount part of reconciliation)
+  callOnMountCallbacks(existingNode)
 }
 
 /**

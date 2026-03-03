@@ -122,15 +122,34 @@ export type ListSourceFn<T> = () => T[]
 export type ListItemFn<T> = (item: T) => RenderSpec
 
 // ============================================================================
-// RenderContext (TBD - placeholder for now)
+// RenderContext
 // ============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface RenderContext {
-  // TODO: Define lifecycle hooks
-  // onMount(callback: () => void | (() => void)): void
-  // onUnmount(callback: () => void): void
-  // getElement(): Element | null
+/**
+ * Callback for onMount lifecycle hook.
+ * Receives the DOM Node associated with the RenderNode (null for Function/Component/Fragment/List).
+ * If the callback returns a function, that function will be called during cleanup.
+ */
+export type OnMountCallback = (node: Node | null) => void | (() => void)
+
+/**
+ * RenderContext provides lifecycle notifications and state management
+ * for FunctionRenderSpec and ComponentRenderSpec.
+ */
+export interface RenderContext<T = unknown> {
+  /**
+   * Application state associated with this RenderNode.
+   * The value is automatically change-enabled via the ChangeDomain,
+   * so child RenderSpecs can reference the state and be notified of changes.
+   */
+  state: T
+
+  /**
+   * Register a callback to run after this node and its children are mounted.
+   * The callback receives the DOM Node associated with this RenderNode.
+   * If the callback returns a function, that function will be called during cleanup.
+   */
+  onMount(callback: OnMountCallback): void
 }
 
 // ============================================================================
