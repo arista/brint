@@ -1890,5 +1890,316 @@ describe("brint", () => {
         })
       })
     })
+
+    describe("reconciliation", () => {
+      let container: HTMLElement
+
+      beforeEach(() => {
+        container = document.createElement("div")
+        document.body.appendChild(container)
+      })
+
+      afterEach(() => {
+        container.remove()
+      })
+
+      describe("element reconciliation", () => {
+        it("should reuse element when tag and namespace match", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ content: "before" })
+
+          brint.render(() => ["div", { class: "test" }, state.content], container)
+
+          const divBefore = container.firstChild as HTMLDivElement
+          assert.equal(divBefore.textContent, "before")
+          assert.equal(divBefore.className, "test")
+
+          // Update to trigger reconciliation
+          state.content = "after"
+
+          const divAfter = container.firstChild as HTMLDivElement
+          // Should be the same DOM element (reused)
+          assert.ok(divBefore === divAfter)
+          assert.equal(divAfter.textContent, "after")
+        })
+
+        it("should update attributes during reconciliation", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ cls: "old", id: "myid" })
+
+          brint.render(() => ["div", { class: () => state.cls, id: () => state.id }], container)
+
+          const div = container.firstChild as HTMLDivElement
+          assert.equal(div.className, "old")
+          assert.equal(div.id, "myid")
+
+          state.cls = "new"
+          assert.equal(div.className, "new")
+
+          state.id = "newid"
+          assert.equal(div.id, "newid")
+        })
+
+        it("should remove old attributes not in new spec", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ showTitle: true })
+
+          brint.render(
+            () =>
+              state.showTitle
+                ? ["div", { class: "test", title: "Hello" }, "content"]
+                : ["div", { class: "test" }, "content"],
+            container,
+          )
+
+          const div = container.firstChild as HTMLDivElement
+          assert.equal(div.getAttribute("title"), "Hello")
+          assert.equal(div.className, "test")
+
+          // Remove the title attribute
+          state.showTitle = false
+
+          assert.equal(div.getAttribute("title"), null)
+          assert.equal(div.className, "test")
+        })
+
+        it("should update styles during reconciliation", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ color: "red" })
+
+          brint.render(() => ["div", { style: { color: () => state.color } }, "styled"], container)
+
+          const div = container.firstChild as HTMLDivElement
+          assert.equal(div.style.color, "red")
+
+          state.color = "blue"
+          assert.equal(div.style.color, "blue")
+        })
+
+        it("should remove old styles not in new spec", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ hasBorder: true })
+
+          brint.render(
+            () =>
+              state.hasBorder
+                ? ["div", { style: { color: "red", border: "1px solid" } }, "styled"]
+                : ["div", { style: { color: "red" } }, "styled"],
+            container,
+          )
+
+          const div = container.firstChild as HTMLDivElement
+          assert.equal(div.style.color, "red")
+          assert.equal(div.style.border, "1px solid")
+
+          state.hasBorder = false
+
+          assert.equal(div.style.color, "red")
+          assert.equal(div.style.border, "")
+        })
+
+        it("should reconcile children", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ items: ["a", "b", "c"] as string[] })
+
+          brint.render(
+            () => ["ul", state.items.map((item: string) => ["li", item])],
+            container,
+          )
+
+          const ul = container.firstChild as HTMLUListElement
+          assert.equal(ul.children.length, 3)
+          assert.equal(ul.children[0]!.textContent, "a")
+          assert.equal(ul.children[1]!.textContent, "b")
+          assert.equal(ul.children[2]!.textContent, "c")
+
+          // Update to different items
+          state.items = ["x", "y"]
+
+          assert.equal(ul.children.length, 2)
+          assert.equal(ul.children[0]!.textContent, "x")
+          assert.equal(ul.children[1]!.textContent, "y")
+        })
+
+        it("should clean up leftover children", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ count: 3 })
+
+          brint.render(
+            () => [
+              "div",
+              Array.from({ length: state.count }, (_, i) => ["span", String(i)]),
+            ],
+            container,
+          )
+
+          const div = container.firstChild as HTMLDivElement
+          assert.equal(div.children.length, 3)
+
+          // Reduce children
+          state.count = 1
+
+          assert.equal(div.children.length, 1)
+          assert.equal(div.children[0]!.textContent, "0")
+        })
+      })
+
+      describe("text reconciliation", () => {
+        it("should update text content without replacing node", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ text: "hello" })
+
+          brint.render(() => state.text, container)
+
+          const textNode = container.firstChild as Text
+          assert.equal(textNode.textContent, "hello")
+
+          state.text = "world"
+
+          // Should be the same text node (reused)
+          assert.ok(container.firstChild === textNode)
+          assert.equal(textNode.textContent, "world")
+        })
+      })
+
+      describe("fragment reconciliation", () => {
+        it("should reconcile fragment children", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ show: true })
+
+          brint.render(
+            () =>
+              state.show
+                ? [null, ["span", "a"], ["span", "b"], ["span", "c"]]
+                : [null, ["span", "x"], ["span", "y"]],
+            container,
+          )
+
+          assert.equal(container.childNodes.length, 3)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+
+          state.show = false
+
+          assert.equal(container.childNodes.length, 2)
+          assert.equal((container.childNodes[0] as Element).textContent, "x")
+          assert.equal((container.childNodes[1] as Element).textContent, "y")
+        })
+      })
+
+      describe("type change reconciliation", () => {
+        it("should replace when element tag changes", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ useDiv: true })
+
+          brint.render(() => (state.useDiv ? ["div", "content"] : ["span", "content"]), container)
+
+          const divBefore = container.firstChild as HTMLDivElement
+          assert.equal(divBefore.tagName, "DIV")
+
+          state.useDiv = false
+
+          const spanAfter = container.firstChild as HTMLSpanElement
+          assert.equal(spanAfter.tagName, "SPAN")
+          // Should be different element (replaced, not reused)
+          assert.ok(divBefore !== spanAfter)
+        })
+
+        it("should replace when switching from element to text", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ useElement: true })
+
+          brint.render(() => (state.useElement ? ["div", "content"] : "just text"), container)
+
+          assert.equal((container.firstChild as Element).tagName, "DIV")
+
+          state.useElement = false
+
+          assert.equal(container.firstChild?.nodeType, 3) // Text node
+          assert.equal(container.textContent, "just text")
+        })
+
+        it("should replace when switching from text to element", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ useElement: false })
+
+          brint.render(() => (state.useElement ? ["div", "content"] : "just text"), container)
+
+          assert.equal(container.textContent, "just text")
+
+          state.useElement = true
+
+          assert.equal((container.firstChild as Element).tagName, "DIV")
+        })
+      })
+
+      describe("nested reconciliation", () => {
+        it("should reconcile deeply nested structures", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ deep: "original" })
+
+          brint.render(
+            () => ["div", ["section", ["article", ["p", state.deep]]]],
+            container,
+          )
+
+          const p = container.querySelector("p")!
+          assert.equal(p.textContent, "original")
+
+          state.deep = "updated"
+
+          assert.equal(p.textContent, "updated")
+        })
+
+        it("should handle component returning different structures", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const state = domain.enableChanges({ mode: "simple" })
+
+          const MyComponent = (props: { mode: string }) => {
+            if (props.mode === "simple") {
+              return ["div", "simple mode"]
+            }
+            // Use array wrapper for multiple children
+            return ["div", [["span", "complex"], ["span", "mode"]]]
+          }
+
+          brint.render([MyComponent, { mode: () => state.mode }], container)
+
+          assert.equal(container.textContent, "simple mode")
+
+          state.mode = "complex"
+
+          assert.equal(container.textContent, "complexmode")
+          assert.equal(container.querySelectorAll("span").length, 2)
+        })
+      })
+    })
   })
 })
