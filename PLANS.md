@@ -4,7 +4,9 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Implement the RenderContext behavior in [design](./docs/design.md)
+Take a crack at writing the README.md for this library.  Try to get the point across quickly with perhaps an example that looks intuitive.  Cover the general areas of functionality before going into a full reference.
+
+do this on branch nsa-readme
 
 ## Docs and references
 
@@ -80,6 +82,5 @@ When working, remember that most of the technical design is in [design](./docs/d
 
 ## TODO
 
-- Define RenderContext and component lifecycle
 - Define Error handling
 - Define external Types
