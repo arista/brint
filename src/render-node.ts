@@ -89,6 +89,9 @@ export class RenderNode {
   /** CachedFunction for ComponentRenderSpec nodes (resolves props and calls component) */
   componentCachedFunction: CachedFunction<unknown> | null = null
 
+  /** CachedFunction for ListRenderSpec items (wraps items source function) */
+  listItemsCachedFunction: CachedFunction<unknown> | null = null
+
   /** All CachedFunctions to clean up when this node is removed */
   private cleanupFunctions: Array<CachedFunction<unknown>> = []
 
@@ -172,6 +175,12 @@ export class RenderNode {
     if (this.componentCachedFunction) {
       this.componentCachedFunction.remove()
       this.componentCachedFunction = null
+    }
+
+    // Clean up list CachedFunction
+    if (this.listItemsCachedFunction) {
+      this.listItemsCachedFunction.remove()
+      this.listItemsCachedFunction = null
     }
 
     // Recursively remove children (copy array since remove() modifies it)

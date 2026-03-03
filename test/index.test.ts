@@ -1262,5 +1262,271 @@ describe("brint", () => {
         assert.equal((container.childNodes[1] as Element).textContent, "b")
       })
     })
+
+    describe("ListRenderSpec", () => {
+      let container: HTMLElement
+
+      beforeEach(() => {
+        container = document.createElement("div")
+        document.body.appendChild(container)
+      })
+
+      afterEach(() => {
+        container.remove()
+      })
+
+      it("should render a list with static items array", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            List,
+            {
+              items: ["a", "b", "c"],
+              each: (item: string) => ["li", item],
+            },
+          ],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 3)
+        assert.equal((container.childNodes[0] as Element).tagName, "LI")
+        assert.equal((container.childNodes[0] as Element).textContent, "a")
+        assert.equal((container.childNodes[1] as Element).textContent, "b")
+        assert.equal((container.childNodes[2] as Element).textContent, "c")
+      })
+
+      it("should render a list with reactive items function", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ items: ["x", "y"] })
+
+        brint.render(
+          [
+            List,
+            {
+              items: () => state.items,
+              each: (item: string) => ["span", item],
+            },
+          ],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 2)
+        assert.equal((container.childNodes[0] as Element).textContent, "x")
+        assert.equal((container.childNodes[1] as Element).textContent, "y")
+      })
+
+      it("should re-render when reactive items change", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ items: [1, 2] as number[] })
+
+        brint.render(
+          [
+            List,
+            {
+              items: () => state.items,
+              each: (item: number) => ["div", String(item)],
+            },
+          ],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 2)
+        assert.equal(container.textContent, "12")
+
+        // Update the items
+        state.items = [3, 4, 5]
+
+        assert.equal(container.childNodes.length, 3)
+        assert.equal(container.textContent, "345")
+      })
+
+      it("should render empty list when items is empty array", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            List,
+            {
+              items: [],
+              each: (item: unknown) => ["div", String(item)],
+            },
+          ],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 0)
+      })
+
+      it("should handle items that render to null", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            List,
+            {
+              items: [1, 2, 3],
+              each: (item: number) => (item === 2 ? null : ["span", String(item)]),
+            },
+          ],
+          container,
+        )
+
+        // 3 RenderNodes created but only 2 have DOM nodes
+        assert.equal(container.childNodes.length, 2)
+        assert.equal((container.childNodes[0] as Element).textContent, "1")
+        assert.equal((container.childNodes[1] as Element).textContent, "3")
+      })
+
+      it("should handle items that render to fragments", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            List,
+            {
+              items: ["a", "b"],
+              each: (item: string) => [null, ["span", `${item}1`], ["span", `${item}2`]],
+            },
+          ],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 4)
+        assert.equal((container.childNodes[0] as Element).textContent, "a1")
+        assert.equal((container.childNodes[1] as Element).textContent, "a2")
+        assert.equal((container.childNodes[2] as Element).textContent, "b1")
+        assert.equal((container.childNodes[3] as Element).textContent, "b2")
+      })
+
+      it("should cleanup when items change (full regeneration)", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ items: ["old1", "old2"] })
+        let renderCount = 0
+
+        brint.render(
+          [
+            List,
+            {
+              items: () => state.items,
+              each: (item: string) => {
+                renderCount++
+                return ["div", item]
+              },
+            },
+          ],
+          container,
+        )
+
+        assert.equal(renderCount, 2)
+        assert.equal(container.textContent, "old1old2")
+
+        // Change to completely different items
+        state.items = ["new1", "new2", "new3"]
+
+        // All items re-rendered (full regeneration)
+        assert.equal(renderCount, 5) // 2 original + 3 new
+        assert.equal(container.textContent, "new1new2new3")
+      })
+
+      it("should cleanup list CachedFunction on unmount", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ items: ["a", "b"] })
+        let renderCount = 0
+
+        const handle = brint.render(
+          [
+            List,
+            {
+              items: () => state.items,
+              each: (item: string) => {
+                renderCount++
+                return ["span", item]
+              },
+            },
+          ],
+          container,
+        )
+
+        assert.equal(renderCount, 2)
+
+        state.items = ["c"]
+        assert.equal(renderCount, 3)
+
+        handle.unmount()
+
+        // After unmount, updates should NOT trigger re-render
+        state.items = ["d", "e"]
+        assert.equal(renderCount, 3)
+      })
+
+      it("should render list inside an element", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(
+          [
+            "ul",
+            [
+              List,
+              {
+                items: ["one", "two"],
+                each: (item: string) => ["li", item],
+              },
+            ],
+          ],
+          container,
+        )
+
+        const ul = container.firstChild as HTMLUListElement
+        assert.equal(ul.tagName, "UL")
+        assert.equal(ul.childNodes.length, 2)
+        assert.equal((ul.childNodes[0] as Element).tagName, "LI")
+        assert.equal((ul.childNodes[0] as Element).textContent, "one")
+        assert.equal((ul.childNodes[1] as Element).textContent, "two")
+      })
+
+      it("should render list with object items", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const users = [
+          { id: 1, name: "Alice" },
+          { id: 2, name: "Bob" },
+        ]
+
+        brint.render(
+          [
+            List,
+            {
+              items: users,
+              each: (user: { id: number; name: string }) =>
+                ["div", { "data-id": String(user.id) }, user.name],
+            },
+          ],
+          container,
+        )
+
+        assert.equal(container.childNodes.length, 2)
+        const div1 = container.childNodes[0] as HTMLDivElement
+        const div2 = container.childNodes[1] as HTMLDivElement
+        assert.equal(div1.getAttribute("data-id"), "1")
+        assert.equal(div1.textContent, "Alice")
+        assert.equal(div2.getAttribute("data-id"), "2")
+        assert.equal(div2.textContent, "Bob")
+      })
+    })
   })
 })

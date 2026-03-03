@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Phase 7 (ComponentRenderSpec) is next.
+Phase 8 (ListRenderSpec Basic) is next, on branch nsa-phase-8
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -52,11 +52,11 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~Re-render child on invalidation~~
 - ~~Basic reconciliation (same type → reuse, different → replace)~~
 
-### Phase 7: ComponentRenderSpec
+### Phase 7: ComponentRenderSpec (COMPLETE)
 
-- Component props (wrap functions in CachedFunctions, except `on`)
-- `componentCachedFunction`
-- Re-render on prop changes
+- ~~Component props (wrap functions in CachedFunctions, except `on`)~~
+- ~~`componentCachedFunction`~~
+- ~~Re-render on prop changes~~
 
 ### Phase 8: ListRenderSpec (Basic)
 

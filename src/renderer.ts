@@ -9,7 +9,10 @@ import type {
   ComponentRenderSpec,
   ComponentArgs,
   RenderContext,
+  ListRenderSpec,
+  ListItemsSpec,
 } from "./index.js"
+import { List } from "./index.js"
 import { RenderNode, type ReactiveElementValue, type RenderNodeComponentProp } from "./render-node.js"
 
 /**
@@ -64,6 +67,14 @@ function isFunctionRenderSpec(spec: RenderSpec): spec is FunctionRenderSpec {
  */
 function isComponentRenderSpec(spec: RenderSpec): spec is ComponentRenderSpec {
   return Array.isArray(spec) && typeof spec[0] === "function"
+}
+
+/**
+ * Check if a value is a ListRenderSpec
+ * ListRenderSpec is an array where the first element is the List symbol
+ */
+function isListRenderSpec(spec: RenderSpec): spec is ListRenderSpec {
+  return Array.isArray(spec) && spec[0] === List
 }
 
 /**
@@ -712,8 +723,56 @@ export function render(
     return renderNode
   }
 
-  // For now, we don't handle ListRenderSpec yet.
-  // Just return an empty RenderNode.
+  if (isListRenderSpec(spec)) {
+    // ListRenderSpec: wrap items in CachedFunction, render each item as a child
+    const [, listItemsSpec] = spec as [typeof List, ListItemsSpec<unknown>]
+    const { items, each } = listItemsSpec
+
+    // Find the actual parent DOM node for child insertion
+    const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
+
+    // Helper to render all items
+    const renderItems = (itemsArray: unknown[]) => {
+      for (const item of itemsArray) {
+        const childSpec = each(item)
+        render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+      }
+    }
+
+    // Helper to clear and re-render all items (full regeneration)
+    const regenerateItems = (itemsArray: unknown[]) => {
+      // Remove all existing children
+      const childrenToRemove = [...renderNode.children]
+      for (const child of childrenToRemove) {
+        child.remove()
+      }
+      // Render new items
+      renderItems(itemsArray)
+    }
+
+    if (typeof items === "function") {
+      // Reactive items source - wrap in CachedFunction
+      const itemsCF = domain.createCachedFunction(items)
+      renderNode.listItemsCachedFunction = itemsCF
+
+      // Initial render
+      const initialItems = itemsCF.call() as unknown[]
+      renderItems(initialItems)
+
+      // Set up listener for re-rendering on invalidation (full regeneration for Phase 8)
+      itemsCF.addListener(() => {
+        const newItems = itemsCF.call() as unknown[]
+        regenerateItems(newItems)
+      })
+    } else {
+      // Static items array - just render once
+      renderItems(items)
+    }
+
+    return renderNode
+  }
+
+  // Unknown RenderSpec type - return empty RenderNode
   return renderNode
 }
 
@@ -824,6 +883,10 @@ function canReconcile(spec: RenderSpec, existingNode: RenderNode): boolean {
   }
 
   if (isComponentRenderSpec(spec) && isComponentRenderSpec(existingSpec)) {
+    return true
+  }
+
+  if (isListRenderSpec(spec) && isListRenderSpec(existingSpec)) {
     return true
   }
 
