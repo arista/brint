@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Phase 8 (ListRenderSpec Basic) is next, on branch nsa-phase-8
+Phase 9 (List Surgical Updates) is next.
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -58,11 +58,11 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~`componentCachedFunction`~~
 - ~~Re-render on prop changes~~
 
-### Phase 8: ListRenderSpec (Basic)
+### Phase 8: ListRenderSpec (Basic) (COMPLETE)
 
-- `listItemsCachedFunction`
-- Generate children from items
-- Full regeneration on list change (no surgical updates yet)
+- ~~`listItemsCachedFunction`~~
+- ~~Generate children from items~~
+- ~~Full regeneration on list change (no surgical updates yet)~~
 
 ### Phase 9: List Surgical Updates
 
