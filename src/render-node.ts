@@ -1,4 +1,4 @@
-import type { CachedFunction } from "chchchchanges"
+import type { CachedFunction, SubscriptionListener } from "chchchchanges"
 import type { RenderSpec } from "./index.js"
 
 /**
@@ -92,6 +92,12 @@ export class RenderNode {
   /** CachedFunction for ListRenderSpec items (wraps items source function) */
   listItemsCachedFunction: CachedFunction<unknown> | null = null
 
+  /** Subscription listener for surgical list updates */
+  listItemsListener: SubscriptionListener | null = null
+
+  /** Current list items array (for unsubscribing and surgical updates) */
+  list: unknown[] | null = null
+
   /** All CachedFunctions to clean up when this node is removed */
   private cleanupFunctions: Array<CachedFunction<unknown>> = []
 
@@ -120,6 +126,57 @@ export class RenderNode {
     }
 
     this.children.push(child)
+  }
+
+  /**
+   * Insert a child RenderNode at a specific index
+   */
+  insertChildAt(index: number, child: RenderNode): void {
+    child.parent = this
+
+    // Get siblings at the insertion point
+    const prevSibling = index > 0 ? this.children[index - 1] : null
+    const nextSibling = this.children[index] ?? null
+
+    // Update sibling links
+    child.prev = prevSibling ?? null
+    child.next = nextSibling
+
+    if (prevSibling) {
+      prevSibling.next = child
+    }
+    if (nextSibling) {
+      nextSibling.prev = child
+    }
+
+    // Insert into children array
+    this.children.splice(index, 0, child)
+  }
+
+  /**
+   * Remove the child at a specific index and return it
+   */
+  removeChildAt(index: number): RenderNode | null {
+    const child = this.children[index]
+    if (!child) return null
+
+    // Update sibling links
+    if (child.prev) {
+      child.prev.next = child.next
+    }
+    if (child.next) {
+      child.next.prev = child.prev
+    }
+
+    // Remove from children array
+    this.children.splice(index, 1)
+
+    // Clear child's links (but don't call remove() - let caller handle that)
+    child.parent = null
+    child.prev = null
+    child.next = null
+
+    return child
   }
 
   /**
@@ -177,11 +234,14 @@ export class RenderNode {
       this.componentCachedFunction = null
     }
 
-    // Clean up list CachedFunction
+    // Clean up list CachedFunction and subscription
     if (this.listItemsCachedFunction) {
       this.listItemsCachedFunction.remove()
       this.listItemsCachedFunction = null
     }
+    // Note: listItemsListener unsubscribe is handled by the renderer before calling remove()
+    this.listItemsListener = null
+    this.list = null
 
     // Recursively remove children (copy array since remove() modifies it)
     const childrenToRemove = [...this.children]

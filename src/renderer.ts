@@ -1,4 +1,4 @@
-import type { ChangeDomain, CachedFunction } from "chchchchanges"
+import type { ChangeDomain, CachedFunction, Change, SubscriptionListener } from "chchchchanges"
 import type {
   RenderSpec,
   ElementRenderSpec,
@@ -731,11 +731,16 @@ export function render(
     // Find the actual parent DOM node for child insertion
     const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
 
+    // Helper to render a single item and return the RenderNode
+    const renderItem = (item: unknown): RenderNode => {
+      const childSpec = each(item)
+      return render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+    }
+
     // Helper to render all items
     const renderItems = (itemsArray: unknown[]) => {
       for (const item of itemsArray) {
-        const childSpec = each(item)
-        render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+        renderItem(item)
       }
     }
 
@@ -750,6 +755,163 @@ export function render(
       renderItems(itemsArray)
     }
 
+    // Helper to render an item and insert at a specific position
+    const renderItemAt = (index: number, item: unknown): RenderNode => {
+      // Render the item (appends to end)
+      const childRenderNode = renderItem(item)
+      // Move it to the correct position
+      const currentIndex = renderNode.children.indexOf(childRenderNode)
+      if (currentIndex !== index && currentIndex !== -1) {
+        moveChildToIndex(renderNode, childRenderNode, index, actualParentDomNode)
+      }
+      return childRenderNode
+    }
+
+    // Handle surgical list changes
+    const handleListChange = (change: Change) => {
+      switch (change.type) {
+        case "ArrayPush": {
+          // Add new items at the end
+          for (const element of change.elements) {
+            renderItem(element)
+          }
+          break
+        }
+
+        case "ArrayPop": {
+          // Remove the last child
+          const lastIndex = renderNode.children.length - 1
+          if (lastIndex >= 0) {
+            const child = renderNode.removeChildAt(lastIndex)
+            if (child) {
+              // Remove DOM nodes and clean up
+              if (child.node && child.node.parentNode) {
+                child.node.parentNode.removeChild(child.node)
+              }
+              // Clean up the child's internal state
+              cleanupRenderNode(child)
+            }
+          }
+          break
+        }
+
+        case "ArrayShift": {
+          // Remove the first child
+          if (renderNode.children.length > 0) {
+            const child = renderNode.removeChildAt(0)
+            if (child) {
+              if (child.node && child.node.parentNode) {
+                child.node.parentNode.removeChild(child.node)
+              }
+              cleanupRenderNode(child)
+            }
+          }
+          break
+        }
+
+        case "ArrayUnshift": {
+          // Add new items at the beginning
+          for (let i = change.elements.length - 1; i >= 0; i--) {
+            renderItemAt(0, change.elements[i])
+          }
+          break
+        }
+
+        case "ArraySplice": {
+          // Remove deleteCount items starting at start, then insert new items
+          const { start, deleteCount, items: newItems } = change
+
+          // Remove items
+          for (let i = 0; i < deleteCount; i++) {
+            if (start < renderNode.children.length) {
+              const child = renderNode.removeChildAt(start)
+              if (child) {
+                if (child.node && child.node.parentNode) {
+                  child.node.parentNode.removeChild(child.node)
+                }
+                cleanupRenderNode(child)
+              }
+            }
+          }
+
+          // Insert new items
+          if (newItems) {
+            for (let i = 0; i < newItems.length; i++) {
+              renderItemAt(start + i, newItems[i])
+            }
+          }
+          break
+        }
+
+        case "ArrayReverse": {
+          // Reverse the order of children
+          // First, collect all DOM nodes in order
+          const domNodes: Node[] = []
+          for (const child of renderNode.children) {
+            const firstDom = child.getFirstDomNode()
+            if (firstDom) {
+              domNodes.push(firstDom)
+            }
+          }
+
+          // Reverse children array
+          renderNode.children.reverse()
+
+          // Update sibling links
+          for (let i = 0; i < renderNode.children.length; i++) {
+            const child = renderNode.children[i]!
+            child.prev = i > 0 ? renderNode.children[i - 1]! : null
+            child.next = i < renderNode.children.length - 1 ? renderNode.children[i + 1]! : null
+          }
+
+          // Re-insert DOM nodes in reverse order
+          if (actualParentDomNode && domNodes.length > 0) {
+            // Remove all DOM nodes first
+            for (const domNode of domNodes) {
+              if (domNode.parentNode) {
+                domNode.parentNode.removeChild(domNode)
+              }
+            }
+            // Re-insert in new order (reversed)
+            for (const child of renderNode.children) {
+              insertDomNodeForRenderNode(child, actualParentDomNode)
+            }
+          }
+          break
+        }
+
+        case "ObjectSet": {
+          // Check if this is setting a numeric index
+          const index = typeof change.prop === "number" ? change.prop : parseInt(String(change.prop), 10)
+          if (!isNaN(index) && index >= 0 && index < renderNode.children.length) {
+            // Replace the child at this index
+            const oldChild = renderNode.removeChildAt(index)
+            if (oldChild) {
+              if (oldChild.node && oldChild.node.parentNode) {
+                oldChild.node.parentNode.removeChild(oldChild.node)
+              }
+              cleanupRenderNode(oldChild)
+            }
+            renderItemAt(index, change.value)
+          }
+          // If not a valid index, ignore (shouldn't happen in normal usage)
+          break
+        }
+
+        // Fallback for unsupported operations
+        case "ArraySort":
+        case "ArrayFill":
+        case "ArrayCopyWithin":
+        default: {
+          // Full regeneration
+          if (renderNode.list) {
+            regenerateItems(renderNode.list)
+          }
+          break
+        }
+      }
+    }
+
     if (typeof items === "function") {
       // Reactive items source - wrap in CachedFunction
       const itemsCF = domain.createCachedFunction(items)
@@ -757,16 +919,44 @@ export function render(
 
       // Initial render
       const initialItems = itemsCF.call() as unknown[]
+      renderNode.list = initialItems
       renderItems(initialItems)
 
-      // Set up listener for re-rendering on invalidation (full regeneration for Phase 8)
+      // Subscribe to the list for surgical updates
+      const subscriptionListener: SubscriptionListener = (change: Change) => {
+        handleListChange(change)
+      }
+      renderNode.listItemsListener = subscriptionListener
+      domain.subscribe(initialItems, subscriptionListener)
+
+      // Set up listener for when the items function returns a different array
       itemsCF.addListener(() => {
+        // Unsubscribe from old list
+        if (renderNode.list && renderNode.listItemsListener) {
+          domain.unsubscribe(renderNode.list, renderNode.listItemsListener)
+        }
+
+        // Get new items
         const newItems = itemsCF.call() as unknown[]
+        renderNode.list = newItems
+
+        // Full regeneration since this is a new array
         regenerateItems(newItems)
+
+        // Subscribe to new list
+        domain.subscribe(newItems, subscriptionListener)
       })
     } else {
-      // Static items array - just render once
+      // Static items array - render once, but still subscribe for surgical updates
+      renderNode.list = items
       renderItems(items)
+
+      // Subscribe to the static array for changes
+      const subscriptionListener: SubscriptionListener = (change: Change) => {
+        handleListChange(change)
+      }
+      renderNode.listItemsListener = subscriptionListener
+      domain.subscribe(items, subscriptionListener)
     }
 
     return renderNode
@@ -797,6 +987,128 @@ function insertDomNode(renderNode: RenderNode, parentDomNode: Node): void {
     } else {
       parentDomNode.appendChild(domNode)
     }
+  }
+}
+
+/**
+ * Insert all DOM nodes for a RenderNode (handles fragments that have multiple DOM nodes)
+ */
+function insertDomNodeForRenderNode(renderNode: RenderNode, parentDomNode: Node): void {
+  if (renderNode.node) {
+    // Simple case: single DOM node
+    insertDomNode(renderNode, parentDomNode)
+  } else {
+    // Fragment or DOM-less node: insert all children's DOM nodes
+    for (const child of renderNode.children) {
+      insertDomNodeForRenderNode(child, parentDomNode)
+    }
+  }
+}
+
+/**
+ * Clean up a RenderNode's internal state (CachedFunctions, etc.) without removing from parent
+ */
+function cleanupRenderNode(renderNode: RenderNode): void {
+  // Clean up this node's reactive state
+  if (renderNode.reactiveAttributes) {
+    renderNode.reactiveAttributes = null
+  }
+  if (renderNode.reactiveStyles) {
+    renderNode.reactiveStyles = null
+  }
+  if (renderNode.reactiveProperties) {
+    renderNode.reactiveProperties = null
+  }
+  if (renderNode.functionCachedFunction) {
+    renderNode.functionCachedFunction.remove()
+    renderNode.functionCachedFunction = null
+  }
+  if (renderNode.componentProps) {
+    for (const prop of renderNode.componentProps.values()) {
+      prop.cachedFunction.remove()
+    }
+    renderNode.componentProps = null
+  }
+  if (renderNode.componentCachedFunction) {
+    renderNode.componentCachedFunction.remove()
+    renderNode.componentCachedFunction = null
+  }
+  if (renderNode.listItemsCachedFunction) {
+    renderNode.listItemsCachedFunction.remove()
+    renderNode.listItemsCachedFunction = null
+  }
+  renderNode.listItemsListener = null
+  renderNode.list = null
+
+  // Recursively clean up children
+  for (const child of renderNode.children) {
+    cleanupRenderNode(child)
+    // Also remove child's DOM node
+    if (child.node && child.node.parentNode) {
+      child.node.parentNode.removeChild(child.node)
+    }
+  }
+  renderNode.children = []
+}
+
+/**
+ * Move a RenderNode from its current position to a new index within the same parent.
+ * Assumes the node is already a child of the parent.
+ */
+function moveChildToIndex(parent: RenderNode, child: RenderNode, newIndex: number, parentDomNode: Node | null): void {
+  const currentIndex = parent.children.indexOf(child)
+  if (currentIndex === -1 || currentIndex === newIndex) return
+
+  // Remove from current position
+  parent.children.splice(currentIndex, 1)
+
+  // Update sibling links at old position
+  if (child.prev) {
+    child.prev.next = child.next
+  }
+  if (child.next) {
+    child.next.prev = child.prev
+  }
+
+  // Insert at new position
+  parent.children.splice(newIndex, 0, child)
+
+  // Update sibling links at new position
+  const prevSibling = newIndex > 0 ? parent.children[newIndex - 1] : null
+  const nextSibling = parent.children[newIndex + 1] ?? null
+
+  child.prev = prevSibling ?? null
+  child.next = nextSibling
+
+  if (prevSibling) {
+    prevSibling.next = child
+  }
+  if (nextSibling) {
+    nextSibling.prev = child
+  }
+
+  // Move DOM nodes to correct position
+  if (parentDomNode) {
+    // Remove DOM nodes
+    if (child.node) {
+      if (child.node.parentNode) {
+        child.node.parentNode.removeChild(child.node)
+      }
+    } else {
+      // For fragments, remove all child DOM nodes
+      const collectDomNodes = (rn: RenderNode): Node[] => {
+        if (rn.node) return [rn.node]
+        return rn.children.flatMap(collectDomNodes)
+      }
+      for (const domNode of collectDomNodes(child)) {
+        if (domNode.parentNode) {
+          domNode.parentNode.removeChild(domNode)
+        }
+      }
+    }
+
+    // Re-insert at correct position
+    insertDomNodeForRenderNode(child, parentDomNode)
   }
 }
 
