@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Phase 7 (ComponentRenderSpec) is next.
+Phase 9 (List Surgical Updates) is next.
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -52,17 +52,17 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~Re-render child on invalidation~~
 - ~~Basic reconciliation (same type → reuse, different → replace)~~
 
-### Phase 7: ComponentRenderSpec
+### Phase 7: ComponentRenderSpec (COMPLETE)
 
-- Component props (wrap functions in CachedFunctions, except `on`)
-- `componentCachedFunction`
-- Re-render on prop changes
+- ~~Component props (wrap functions in CachedFunctions, except `on`)~~
+- ~~`componentCachedFunction`~~
+- ~~Re-render on prop changes~~
 
-### Phase 8: ListRenderSpec (Basic)
+### Phase 8: ListRenderSpec (Basic) (COMPLETE)
 
-- `listItemsCachedFunction`
-- Generate children from items
-- Full regeneration on list change (no surgical updates yet)
+- ~~`listItemsCachedFunction`~~
+- ~~Generate children from items~~
+- ~~Full regeneration on list change (no surgical updates yet)~~
 
 ### Phase 9: List Surgical Updates
 
