@@ -6,9 +6,11 @@ import type {
   ElementChildRenderSpecs,
   FragmentRenderSpec,
   FunctionRenderSpec,
+  ComponentRenderSpec,
+  ComponentArgs,
   RenderContext,
 } from "./index.js"
-import { RenderNode, type ReactiveElementValue } from "./render-node.js"
+import { RenderNode, type ReactiveElementValue, type RenderNodeComponentProp } from "./render-node.js"
 
 /**
  * Result of converting an ElementValue to a ReactiveElementValue
@@ -54,6 +56,14 @@ function isFragmentRenderSpec(spec: RenderSpec): spec is FragmentRenderSpec {
  */
 function isFunctionRenderSpec(spec: RenderSpec): spec is FunctionRenderSpec {
   return typeof spec === "function"
+}
+
+/**
+ * Check if a value is a ComponentRenderSpec
+ * ComponentRenderSpec is an array where the first element is a function
+ */
+function isComponentRenderSpec(spec: RenderSpec): spec is ComponentRenderSpec {
+  return Array.isArray(spec) && typeof spec[0] === "function"
 }
 
 /**
@@ -645,7 +655,64 @@ export function render(
     return renderNode
   }
 
-  // For now, we don't handle ComponentRenderSpec or ListRenderSpec yet.
+  if (isComponentRenderSpec(spec)) {
+    // ComponentRenderSpec: wrap props in CachedFunctions, call component
+    const [componentFn, componentArgs] = spec
+    const ctx: RenderContext = {}
+
+    // Find the actual parent DOM node for child insertion
+    const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
+
+    // Process component props - wrap functions in CachedFunctions (except "on")
+    const staticProps: Record<string, unknown> = {}
+    const reactivePropCFs: Map<string, RenderNodeComponentProp> = new Map()
+
+    if (componentArgs) {
+      for (const [key, value] of Object.entries(componentArgs)) {
+        if (key === "on") {
+          // "on" handlers are passed through without wrapping
+          staticProps[key] = value
+        } else if (typeof value === "function") {
+          // Wrap reactive prop in CachedFunction
+          const cf = domain.createCachedFunction(value as () => unknown)
+          reactivePropCFs.set(key, { cachedFunction: cf })
+        } else {
+          // Static prop
+          staticProps[key] = value
+        }
+      }
+    }
+
+    // Store reactive props if any
+    if (reactivePropCFs.size > 0) {
+      renderNode.componentProps = reactivePropCFs
+    }
+
+    // Create componentCachedFunction that resolves props and calls component
+    const componentCF = domain.createCachedFunction(() => {
+      // Build resolved props by combining static props and calling reactive CFs
+      const resolvedProps: Record<string, unknown> = { ...staticProps }
+      for (const [key, prop] of reactivePropCFs) {
+        resolvedProps[key] = prop.cachedFunction.call()
+      }
+      return componentFn(resolvedProps, ctx)
+    })
+    renderNode.componentCachedFunction = componentCF
+
+    // Execute and render the result
+    const childSpec = componentCF.call() as RenderSpec
+    render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
+
+    // Set up listener for re-rendering on invalidation
+    componentCF.addListener(() => {
+      const newChildSpec = componentCF.call() as RenderSpec
+      renderOver(newChildSpec, renderNode, actualParentDomNode, xmlns, domain)
+    })
+
+    return renderNode
+  }
+
+  // For now, we don't handle ListRenderSpec yet.
   // Just return an empty RenderNode.
   return renderNode
 }
@@ -753,6 +820,10 @@ function canReconcile(spec: RenderSpec, existingNode: RenderNode): boolean {
   }
 
   if (isFragmentRenderSpec(spec) && isFragmentRenderSpec(existingSpec)) {
+    return true
+  }
+
+  if (isComponentRenderSpec(spec) && isComponentRenderSpec(existingSpec)) {
     return true
   }
 
