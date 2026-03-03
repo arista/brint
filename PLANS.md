@@ -4,7 +4,7 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Phase 9 (List Surgical Updates) is next, on branch nsa-phase-9
+Phase 10 (Reconciliation Polish) is next.
 
 Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
@@ -64,11 +64,11 @@ Remember that most of the technical design is in [design](./docs/design.md), inf
 - ~~Generate children from items~~
 - ~~Full regeneration on list change (no surgical updates yet)~~
 
-### Phase 9: List Surgical Updates
+### Phase 9: List Surgical Updates (COMPLETE)
 
-- Subscribe to list changes via `listItemsListener`
-- Handle: ArrayPush, ArrayPop, ArrayShift, ArrayUnshift, ObjectSet, ArraySplice, ArrayReverse
-- Fallback for other operations
+- ~~Subscribe to list changes via `listItemsListener`~~
+- ~~Handle: ArrayPush, ArrayPop, ArrayShift, ArrayUnshift, ObjectSet, ArraySplice, ArrayReverse~~
+- ~~Fallback for other operations~~
 
 ### Phase 10: Reconciliation Polish
 
