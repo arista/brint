@@ -46,6 +46,14 @@ export interface RenderNodeComponentProp {
 }
 
 /**
+ * Stores an event listener with its handler and options for cleanup
+ */
+export interface RenderNodeEventListener {
+  handler: EventListenerOrEventListenerObject
+  options?: AddEventListenerOptions
+}
+
+/**
  * RenderNode represents a live node in the render tree.
  * It connects a RenderSpec to its corresponding DOM node(s).
  */
@@ -79,6 +87,9 @@ export class RenderNode {
 
   /** Reactive properties (only populated if there are reactive values) */
   reactiveProperties: Map<string | symbol, RenderNodeProperty> | null = null
+
+  /** Event listeners added to this element (for cleanup during reconciliation) */
+  eventListeners: Map<string, RenderNodeEventListener> | null = null
 
   /** CachedFunction for FunctionRenderSpec nodes */
   functionCachedFunction: CachedFunction<unknown> | null = null
@@ -215,6 +226,7 @@ export class RenderNode {
     this.reactiveAttributes = null
     this.reactiveStyles = null
     this.reactiveProperties = null
+    this.eventListeners = null
 
     // Clean up function CachedFunction
     if (this.functionCachedFunction) {
