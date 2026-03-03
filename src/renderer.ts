@@ -1220,7 +1220,8 @@ function reconcile(
 
   // Handle based on type
   if (isNullRenderSpec(spec)) {
-    // NullRenderSpec: nothing to update
+    // NullRenderSpec: nothing to update, just clean up leftover children
+    cleanupLeftoverChildren(existingNode, 0)
     return
   }
 
@@ -1230,16 +1231,522 @@ function reconcile(
     if (existingNode.node) {
       existingNode.node.textContent = newText
     }
+    cleanupLeftoverChildren(existingNode, 0)
     return
   }
 
-  // For now, other types (Element, Function, Fragment) get full replacement
-  // Phase 10 will implement full attribute reconciliation for elements
-  // For Phase 6, just remove and re-render for complex cases
+  if (isElementRenderSpec(spec)) {
+    // ElementRenderSpec: reconcile attributes, styles, properties, event listeners, and children
+    reconcileElement(spec, existingNode, parentDomNode, xmlns, domain)
+    return
+  }
+
+  if (isFragmentRenderSpec(spec)) {
+    // FragmentRenderSpec: reconcile children
+    const childSpecs = spec.slice(1) as RenderSpec[]
+    const actualParentDomNode = parentDomNode || existingNode.findParentDomNode()
+    reconcileChildren(childSpecs, existingNode, actualParentDomNode, xmlns, domain)
+    return
+  }
+
+  if (isFunctionRenderSpec(spec)) {
+    // FunctionRenderSpec: clean up old CachedFunction, set up new one
+    reconcileFunctionSpec(spec, existingNode, parentDomNode, xmlns, domain)
+    return
+  }
+
+  if (isComponentRenderSpec(spec)) {
+    // ComponentRenderSpec: clean up old state, set up new component
+    reconcileComponentSpec(spec, existingNode, parentDomNode, xmlns, domain)
+    return
+  }
+
+  if (isListRenderSpec(spec)) {
+    // ListRenderSpec: clean up old state, set up new list
+    reconcileListSpec(spec, existingNode, parentDomNode, xmlns, domain)
+    return
+  }
+
+  // Unknown type: full replacement
   const parent = existingNode.parent
   if (parent) {
     existingNode.remove()
     render(spec, parent, parentDomNode, xmlns, domain)
+  }
+}
+
+/**
+ * Clean up children beyond the specified index
+ */
+function cleanupLeftoverChildren(node: RenderNode, keepCount: number): void {
+  while (node.children.length > keepCount) {
+    const child = node.children[node.children.length - 1]!
+    child.remove()
+  }
+}
+
+/**
+ * Reconcile children of a node with new child specs
+ */
+function reconcileChildren(
+  childSpecs: RenderSpec[],
+  parentNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  // Reconcile each child
+  for (let i = 0; i < childSpecs.length; i++) {
+    const childSpec = childSpecs[i]!
+    const existingChild = parentNode.children[i]
+
+    if (existingChild && canReconcile(childSpec, existingChild)) {
+      // Reconcile existing child
+      reconcile(childSpec, existingChild, parentDomNode, xmlns, domain)
+    } else if (existingChild) {
+      // Can't reconcile - remove and render fresh
+      existingChild.remove()
+      // Render new child at this position
+      const newChild = render(childSpec, null, parentDomNode, xmlns, domain)
+      // Insert at the correct position
+      parentNode.insertChildAt(i, newChild)
+    } else {
+      // No existing child - render new one
+      render(childSpec, parentNode, parentDomNode, xmlns, domain)
+    }
+  }
+
+  // Clean up leftover children
+  cleanupLeftoverChildren(parentNode, childSpecs.length)
+}
+
+/**
+ * Reconcile an ElementRenderSpec with an existing element RenderNode
+ */
+function reconcileElement(
+  spec: ElementRenderSpec,
+  existingNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  const element = existingNode.node as Element
+  if (!element) return
+
+  const { args, children } = parseElementRenderSpec(spec)
+
+  // Clean up old reactive state
+  clearReactiveState(existingNode)
+
+  // Get old attribute names from the element
+  const oldAttrNames = new Set<string>()
+  for (let i = 0; i < element.attributes.length; i++) {
+    oldAttrNames.add(element.attributes[i]!.name)
+  }
+
+  // Apply new attributes and track which ones we're keeping
+  const newAttrNames = new Set<string>()
+  if (args) {
+    for (const key of Object.keys(args)) {
+      if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
+        continue
+      }
+      newAttrNames.add(key)
+    }
+    applyAttributes(element, args, domain, existingNode)
+  }
+
+  // Remove old attributes that are no longer present
+  for (const oldName of oldAttrNames) {
+    if (!newAttrNames.has(oldName)) {
+      element.removeAttribute(oldName)
+    }
+  }
+
+  // Handle styles
+  const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
+  if (elementWithStyle.style) {
+    // Get old style property names
+    const oldStyleNames = new Set<string>()
+    for (let i = 0; i < elementWithStyle.style.length; i++) {
+      oldStyleNames.add(elementWithStyle.style[i]!)
+    }
+
+    // Apply new styles
+    const newStyleNames = new Set<string>()
+    if (args?.style) {
+      for (const key of Object.keys(args.style)) {
+        newStyleNames.add(key)
+      }
+      applyStyles(element, args.style, domain, existingNode)
+    }
+
+    // Remove old styles that are no longer present
+    for (const oldName of oldStyleNames) {
+      if (!newStyleNames.has(oldName)) {
+        elementWithStyle.style.removeProperty(oldName)
+      }
+    }
+  }
+
+  // Handle event listeners - remove all old listeners by cloning the element's event handling
+  // Since we can't enumerate event listeners, we'll just add the new ones
+  // Old listeners will be garbage collected when no longer referenced
+  // For proper cleanup, we'd need to track listeners on RenderNode
+  if (args?.on) {
+    applyEventListeners(element, args.on)
+  }
+
+  // Handle properties
+  if (args?.properties) {
+    applyProperties(element, args.properties, domain, existingNode)
+  }
+
+  // Reconcile children
+  const childSpecs: RenderSpec[] = children
+    ? isRenderSpecArray(children)
+      ? children
+      : [children]
+    : []
+  reconcileChildren(childSpecs, existingNode, element, existingNode.xmlns, domain)
+}
+
+/**
+ * Clear reactive state from a RenderNode (without removing the node itself)
+ */
+function clearReactiveState(node: RenderNode): void {
+  // Clean up reactive attributes
+  if (node.reactiveAttributes) {
+    node.reactiveAttributes = null
+  }
+
+  // Clean up reactive styles
+  if (node.reactiveStyles) {
+    node.reactiveStyles = null
+  }
+
+  // Clean up reactive properties
+  if (node.reactiveProperties) {
+    node.reactiveProperties = null
+  }
+}
+
+/**
+ * Reconcile a FunctionRenderSpec with an existing function RenderNode
+ */
+function reconcileFunctionSpec(
+  spec: FunctionRenderSpec,
+  existingNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  // Clean up old CachedFunction
+  if (existingNode.functionCachedFunction) {
+    existingNode.functionCachedFunction.remove()
+    existingNode.functionCachedFunction = null
+  }
+
+  const ctx: RenderContext = {}
+  const actualParentDomNode = parentDomNode || existingNode.findParentDomNode()
+
+  // Create new CachedFunction
+  const cf = domain.createCachedFunction(() => spec(ctx))
+  existingNode.functionCachedFunction = cf
+
+  // Execute and reconcile the result
+  const childSpec = cf.call() as RenderSpec
+  const existingChild = existingNode.children[0]
+
+  if (existingChild && canReconcile(childSpec, existingChild)) {
+    reconcile(childSpec, existingChild, actualParentDomNode, xmlns, domain)
+  } else {
+    // Remove old children and render new
+    cleanupLeftoverChildren(existingNode, 0)
+    render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
+  }
+
+  // Set up listener for re-rendering
+  cf.addListener(() => {
+    const newChildSpec = cf.call() as RenderSpec
+    renderOver(newChildSpec, existingNode, actualParentDomNode, xmlns, domain)
+  })
+}
+
+/**
+ * Reconcile a ComponentRenderSpec with an existing component RenderNode
+ */
+function reconcileComponentSpec(
+  spec: ComponentRenderSpec,
+  existingNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  // Clean up old component state
+  if (existingNode.componentProps) {
+    for (const prop of existingNode.componentProps.values()) {
+      prop.cachedFunction.remove()
+    }
+    existingNode.componentProps = null
+  }
+  if (existingNode.componentCachedFunction) {
+    existingNode.componentCachedFunction.remove()
+    existingNode.componentCachedFunction = null
+  }
+
+  const [componentFn, componentArgs] = spec
+  const ctx: RenderContext = {}
+  const actualParentDomNode = parentDomNode || existingNode.findParentDomNode()
+
+  // Process component props
+  const staticProps: Record<string, unknown> = {}
+  const reactivePropCFs: Map<string, RenderNodeComponentProp> = new Map()
+
+  if (componentArgs) {
+    for (const [key, value] of Object.entries(componentArgs)) {
+      if (key === "on") {
+        staticProps[key] = value
+      } else if (typeof value === "function") {
+        const cf = domain.createCachedFunction(value as () => unknown)
+        reactivePropCFs.set(key, { cachedFunction: cf })
+      } else {
+        staticProps[key] = value
+      }
+    }
+  }
+
+  if (reactivePropCFs.size > 0) {
+    existingNode.componentProps = reactivePropCFs
+  }
+
+  // Create componentCachedFunction
+  const componentCF = domain.createCachedFunction(() => {
+    const resolvedProps: Record<string, unknown> = { ...staticProps }
+    for (const [key, prop] of reactivePropCFs) {
+      resolvedProps[key] = prop.cachedFunction.call()
+    }
+    return componentFn(resolvedProps, ctx)
+  })
+  existingNode.componentCachedFunction = componentCF
+
+  // Execute and reconcile the result
+  const childSpec = componentCF.call() as RenderSpec
+  const existingChild = existingNode.children[0]
+
+  if (existingChild && canReconcile(childSpec, existingChild)) {
+    reconcile(childSpec, existingChild, actualParentDomNode, xmlns, domain)
+  } else {
+    cleanupLeftoverChildren(existingNode, 0)
+    render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
+  }
+
+  // Set up listener
+  componentCF.addListener(() => {
+    const newChildSpec = componentCF.call() as RenderSpec
+    renderOver(newChildSpec, existingNode, actualParentDomNode, xmlns, domain)
+  })
+}
+
+/**
+ * Reconcile a ListRenderSpec with an existing list RenderNode
+ */
+function reconcileListSpec(
+  spec: ListRenderSpec,
+  existingNode: RenderNode,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  // Clean up old list state
+  if (existingNode.listItemsCachedFunction) {
+    existingNode.listItemsCachedFunction.remove()
+    existingNode.listItemsCachedFunction = null
+  }
+  if (existingNode.list && existingNode.listItemsListener) {
+    domain.unsubscribe(existingNode.list, existingNode.listItemsListener)
+  }
+  existingNode.listItemsListener = null
+  existingNode.list = null
+
+  // Remove all old children since list reconciliation is complex
+  cleanupLeftoverChildren(existingNode, 0)
+
+  // Re-render the list fresh (reuse the existing ListRenderSpec logic)
+  const [, listItemsSpec] = spec as [typeof List, ListItemsSpec<unknown>]
+  const { items, each } = listItemsSpec
+  const actualParentDomNode = parentDomNode || existingNode.findParentDomNode()
+
+  // Helper to render a single item
+  const renderItem = (item: unknown): RenderNode => {
+    const childSpec = each(item)
+    return render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
+  }
+
+  // Helper to render all items
+  const renderItems = (itemsArray: unknown[]) => {
+    for (const item of itemsArray) {
+      renderItem(item)
+    }
+  }
+
+  // Helper to regenerate all items
+  const regenerateItems = (itemsArray: unknown[]) => {
+    cleanupLeftoverChildren(existingNode, 0)
+    renderItems(itemsArray)
+  }
+
+  // Helper to render an item at a specific position
+  const renderItemAt = (index: number, item: unknown): RenderNode => {
+    const childRenderNode = renderItem(item)
+    const currentIndex = existingNode.children.indexOf(childRenderNode)
+    if (currentIndex !== index && currentIndex !== -1) {
+      moveChildToIndex(existingNode, childRenderNode, index, actualParentDomNode)
+    }
+    return childRenderNode
+  }
+
+  // Handle surgical list changes (copied from main render for lists)
+  const handleListChange = (change: Change) => {
+    switch (change.type) {
+      case "ArrayPush": {
+        for (const element of change.elements) {
+          renderItem(element)
+        }
+        break
+      }
+      case "ArrayPop": {
+        const lastIndex = existingNode.children.length - 1
+        if (lastIndex >= 0) {
+          const child = existingNode.removeChildAt(lastIndex)
+          if (child) {
+            if (child.node && child.node.parentNode) {
+              child.node.parentNode.removeChild(child.node)
+            }
+            cleanupRenderNode(child)
+          }
+        }
+        break
+      }
+      case "ArrayShift": {
+        if (existingNode.children.length > 0) {
+          const child = existingNode.removeChildAt(0)
+          if (child) {
+            if (child.node && child.node.parentNode) {
+              child.node.parentNode.removeChild(child.node)
+            }
+            cleanupRenderNode(child)
+          }
+        }
+        break
+      }
+      case "ArrayUnshift": {
+        for (let i = change.elements.length - 1; i >= 0; i--) {
+          renderItemAt(0, change.elements[i])
+        }
+        break
+      }
+      case "ArraySplice": {
+        const { start, deleteCount, items: newItems } = change
+        for (let i = 0; i < deleteCount; i++) {
+          if (start < existingNode.children.length) {
+            const child = existingNode.removeChildAt(start)
+            if (child) {
+              if (child.node && child.node.parentNode) {
+                child.node.parentNode.removeChild(child.node)
+              }
+              cleanupRenderNode(child)
+            }
+          }
+        }
+        if (newItems) {
+          for (let i = 0; i < newItems.length; i++) {
+            renderItemAt(start + i, newItems[i])
+          }
+        }
+        break
+      }
+      case "ArrayReverse": {
+        const domNodes: Node[] = []
+        for (const child of existingNode.children) {
+          const firstDom = child.getFirstDomNode()
+          if (firstDom) {
+            domNodes.push(firstDom)
+          }
+        }
+        existingNode.children.reverse()
+        for (let i = 0; i < existingNode.children.length; i++) {
+          const child = existingNode.children[i]!
+          child.prev = i > 0 ? existingNode.children[i - 1]! : null
+          child.next = i < existingNode.children.length - 1 ? existingNode.children[i + 1]! : null
+        }
+        if (actualParentDomNode && domNodes.length > 0) {
+          for (const domNode of domNodes) {
+            if (domNode.parentNode) {
+              domNode.parentNode.removeChild(domNode)
+            }
+          }
+          for (const child of existingNode.children) {
+            insertDomNodeForRenderNode(child, actualParentDomNode)
+          }
+        }
+        break
+      }
+      case "ObjectSet": {
+        const index = typeof change.prop === "number" ? change.prop : parseInt(String(change.prop), 10)
+        if (!isNaN(index) && index >= 0 && index < existingNode.children.length) {
+          const oldChild = existingNode.removeChildAt(index)
+          if (oldChild) {
+            if (oldChild.node && oldChild.node.parentNode) {
+              oldChild.node.parentNode.removeChild(oldChild.node)
+            }
+            cleanupRenderNode(oldChild)
+          }
+          renderItemAt(index, change.value)
+        }
+        break
+      }
+      default: {
+        if (existingNode.list) {
+          regenerateItems(existingNode.list)
+        }
+        break
+      }
+    }
+  }
+
+  if (typeof items === "function") {
+    const itemsCF = domain.createCachedFunction(items)
+    existingNode.listItemsCachedFunction = itemsCF
+
+    const initialItems = itemsCF.call() as unknown[]
+    existingNode.list = initialItems
+    renderItems(initialItems)
+
+    const subscriptionListener: SubscriptionListener = (change: Change) => {
+      handleListChange(change)
+    }
+    existingNode.listItemsListener = subscriptionListener
+    domain.subscribe(initialItems, subscriptionListener)
+
+    itemsCF.addListener(() => {
+      if (existingNode.list && existingNode.listItemsListener) {
+        domain.unsubscribe(existingNode.list, existingNode.listItemsListener)
+      }
+      const newItems = itemsCF.call() as unknown[]
+      existingNode.list = newItems
+      regenerateItems(newItems)
+      domain.subscribe(newItems, subscriptionListener)
+    })
+  } else {
+    existingNode.list = items
+    renderItems(items)
+
+    const subscriptionListener: SubscriptionListener = (change: Change) => {
+      handleListChange(change)
+    }
+    existingNode.listItemsListener = subscriptionListener
+    domain.subscribe(items, subscriptionListener)
   }
 }
 
