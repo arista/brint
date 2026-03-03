@@ -4,9 +4,11 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Phase 10 (Reconciliation Polish) is complete. See TODO section for next steps.
+In [design](./docs/design.md), I've started thinking about the RenderContext.  I wonder what your thoughts are as to what makes sense here.  What lifecycle notifications would make sense in this system?  Is there terminology that should be reused from other systems?
 
-Remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
+## Docs and references
+
+When working, remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
 
 ## Implementation Plan
 

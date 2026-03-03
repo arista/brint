@@ -159,8 +159,14 @@ ListItemFn<T> = (item:T) => RenderSpec
 
 ListSymbol = FIXME - a special Symbol exposed by the library
 
-RenderContext = {
-  FIXME - define interface exposed to components
+RenderContext<T = unknown> = {
+  // Application state associated with this RenderNode, automatically change-enabled
+  state: T
+
+  // Register a callback to run after this node and its children are mounted
+  // The callback receives the DOM Node associated with this RenderNode (null for Function/Component/Fragment/List)
+  // If the callback returns a function, that function will be called during cleanup
+  onMount: (callback: (node: Node | null) => void | (() => void)) => void
 }
 
 ```
@@ -443,6 +449,79 @@ Here are the rules to follow when applying a RenderSpec to an existing RenderNod
   - All of these will have no DOM Node. If the existing RenderSpec.spec also has no DOM Node, then clear out the RenderSpec (except its children), and reuse it. Proceed recursively, and clear out any extra children.
 
 In all other cases, perform a full RenderNode removal and replace.
+
+## RenderContext
+
+The RenderContext is made available to the application functions used by FunctionRenderSpec and ComponentRenderSpec. It provides access to lifecycle notifications and state management for the underlying RenderNode.
+
+### Interface
+
+```
+RenderContext<T = unknown> = {
+  state: T
+  onMount: (callback: (node: Node | null) => void | (() => void)) => void
+}
+```
+
+### state
+
+The `state` property allows the application to associate arbitrary data with the RenderNode. The value is automatically change-enabled via the ChangeDomain, so child RenderSpecs can reference the state and be notified of changes.
+
+```
+(ctx: RenderContext<{ count: number }>) => {
+  ctx.state = { count: 0 }
+
+  return ["button", {
+    on: { click: () => ctx.state.count++ }
+  }, () => `Count: ${ctx.state.count}`]
+}
+```
+
+The state is removed when the RenderNode is unmounted.
+
+### onMount
+
+The `onMount` function registers a callback that runs after the RenderNode and all its children have been rendered and added to the DOM.
+
+**Timing:** Callbacks are called synchronously in bottom-up order. When a node's onMount fires:
+- This node's DOM exists (if applicable)
+- All children's DOM exists
+- All children's onMount callbacks have already fired
+- Parent's onMount has not yet fired
+
+**The node parameter:** The callback receives `renderNode.node`, which is:
+- The Element for ElementRenderSpec
+- The Text node for TextRenderSpec
+- null for FunctionRenderSpec, ComponentRenderSpec, FragmentRenderSpec, ListRenderSpec, NullRenderSpec
+
+**Cleanup:** If the callback returns a function, that function is called during cleanup (before the node is removed). Cleanup also runs in bottom-up order: children's cleanup runs before parent's cleanup.
+
+```
+(ctx) => {
+  ctx.onMount((node) => {
+    const timer = setInterval(() => console.log('tick'), 1000)
+    window.addEventListener('resize', handleResize)
+
+    // Return cleanup function
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('resize', handleResize)
+    }
+  })
+
+  return ["div", "content"]
+}
+```
+
+### Reconciliation Behavior
+
+When a FunctionRenderSpec or ComponentRenderSpec is reconciled (reused during re-rendering), it is treated as an unmount followed by a mount:
+1. Cleanup callbacks from the old spec are called
+2. The RenderNode's reactive state is cleared
+3. The new spec is set up fresh
+4. onMount callbacks from the new spec are called
+
+This means state does not persist across reconciliation, and onMount will fire again with the new spec.
 
 ## DOM Interface
 
