@@ -1527,6 +1527,368 @@ describe("brint", () => {
         assert.equal(div2.getAttribute("data-id"), "2")
         assert.equal(div2.textContent, "Bob")
       })
+
+      describe("surgical updates", () => {
+        it("should handle push surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 2)
+          assert.equal(container.childNodes.length, 2)
+
+          items.push("c")
+
+          // Only the new item should be rendered
+          assert.equal(renderCount, 3)
+          assert.equal(container.childNodes.length, 3)
+          assert.equal((container.childNodes[2] as Element).textContent, "c")
+        })
+
+        it("should handle pop surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b", "c"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 3)
+          assert.equal(container.childNodes.length, 3)
+
+          items.pop()
+
+          // No new items rendered, just removal
+          assert.equal(renderCount, 3)
+          assert.equal(container.childNodes.length, 2)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "b")
+        })
+
+        it("should handle shift surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b", "c"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 3)
+          items.shift()
+
+          // No new items rendered, just removal
+          assert.equal(renderCount, 3)
+          assert.equal(container.childNodes.length, 2)
+          assert.equal((container.childNodes[0] as Element).textContent, "b")
+          assert.equal((container.childNodes[1] as Element).textContent, "c")
+        })
+
+        it("should handle unshift surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["b", "c"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 2)
+
+          items.unshift("a")
+
+          // Only the new item should be rendered
+          assert.equal(renderCount, 3)
+          assert.equal(container.childNodes.length, 3)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "b")
+          assert.equal((container.childNodes[2] as Element).textContent, "c")
+        })
+
+        it("should handle splice (delete) surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b", "c", "d"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 4)
+
+          // Remove "b" and "c"
+          items.splice(1, 2)
+
+          assert.equal(renderCount, 4) // No new renders
+          assert.equal(container.childNodes.length, 2)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "d")
+        })
+
+        it("should handle splice (insert) surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "d"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 2)
+
+          // Insert "b" and "c" at index 1
+          items.splice(1, 0, "b", "c")
+
+          assert.equal(renderCount, 4) // 2 new items rendered
+          assert.equal(container.childNodes.length, 4)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "b")
+          assert.equal((container.childNodes[2] as Element).textContent, "c")
+          assert.equal((container.childNodes[3] as Element).textContent, "d")
+        })
+
+        it("should handle splice (replace) surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b", "c"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 3)
+
+          // Replace "b" with "x", "y"
+          items.splice(1, 1, "x", "y")
+
+          assert.equal(renderCount, 5) // 2 new items rendered
+          assert.equal(container.childNodes.length, 4)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "x")
+          assert.equal((container.childNodes[2] as Element).textContent, "y")
+          assert.equal((container.childNodes[3] as Element).textContent, "c")
+        })
+
+        it("should handle reverse surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b", "c"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 3)
+
+          items.reverse()
+
+          // No new renders, just reordering
+          assert.equal(renderCount, 3)
+          assert.equal(container.childNodes.length, 3)
+          assert.equal((container.childNodes[0] as Element).textContent, "c")
+          assert.equal((container.childNodes[1] as Element).textContent, "b")
+          assert.equal((container.childNodes[2] as Element).textContent, "a")
+        })
+
+        it("should handle index assignment surgically", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a", "b", "c"])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => {
+                  renderCount++
+                  return ["span", item]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 3)
+
+          // Replace item at index 1 via direct assignment
+          items[1] = "x"
+
+          // Only 1 new item rendered
+          assert.equal(renderCount, 4)
+          assert.equal(container.childNodes.length, 3)
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "x")
+          assert.equal((container.childNodes[2] as Element).textContent, "c")
+        })
+
+        it("should fallback to full regeneration for sort", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges([3, 1, 2])
+
+          let renderCount = 0
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: number) => {
+                  renderCount++
+                  return ["span", String(item)]
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.equal(renderCount, 3)
+
+          items.sort()
+
+          // Full regeneration means all items re-rendered
+          assert.equal(renderCount, 6)
+          assert.equal(container.childNodes.length, 3)
+          assert.equal((container.childNodes[0] as Element).textContent, "1")
+          assert.equal((container.childNodes[1] as Element).textContent, "2")
+          assert.equal((container.childNodes[2] as Element).textContent, "3")
+        })
+
+        it("should handle multiple push operations", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const items = domain.enableChanges(["a"])
+
+          brint.render(
+            [
+              List,
+              {
+                items: () => items,
+                each: (item: string) => ["span", item],
+              },
+            ],
+            container,
+          )
+
+          assert.equal(container.childNodes.length, 1)
+
+          items.push("b")
+          assert.equal(container.childNodes.length, 2)
+
+          items.push("c", "d")
+          assert.equal(container.childNodes.length, 4)
+
+          assert.equal((container.childNodes[0] as Element).textContent, "a")
+          assert.equal((container.childNodes[1] as Element).textContent, "b")
+          assert.equal((container.childNodes[2] as Element).textContent, "c")
+          assert.equal((container.childNodes[3] as Element).textContent, "d")
+        })
+      })
     })
   })
 })
