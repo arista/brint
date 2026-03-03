@@ -158,7 +158,7 @@ Components are functions that receive props and return a RenderSpec:
 const Button = (props) => {
   return ["button", {
     class: props.variant,
-    on: { click: props.onClick }
+    on: props.on
   }, props.label]
 }
 
@@ -166,7 +166,7 @@ const Button = (props) => {
 [Button, {
   variant: "primary",
   label: "Submit",
-  onClick: () => handleSubmit()
+  on: { click: () => handleSubmit() }
 }]
 ```
 
