@@ -444,6 +444,18 @@ Here are the rules to follow when applying a RenderSpec to an existing RenderNod
 
 In all other cases, perform a full RenderNode removal and replace.
 
+## RenderContext
+
+The RenderContext is made available to the application functions used by FunctionRenderSpec and ComponentRenderSpec.  It is intended to give the application fine-level access to lifecycle notifications around the underlying RenderNodes.  An application would typically use this for one of these reasons:
+
+* to attach application state to the RenderNode
+* to access the DOM Node (if any) held by the RenderNode
+
+The RenderContext provides these functions:
+
+* The ability to associate an arbitrary value with the RenderNode, through a "state" property with getter and setter.  The value is automatically change enabled, so child RenderSpecs can reference that value and be notified of changes.  The value is removed when the RenderNode is unmounted (??).
+* Lifecycle notifications: ???
+
 ## DOM Interface
 
 TBD - is it worth defining our own interfaces for the DOM behaviors, at least in terms of creating nodes, adding children, etc.? This would allow the library to operate against other DOM implementations, perhaps in test or SSR scenarios.
