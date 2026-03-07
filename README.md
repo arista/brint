@@ -1,130 +1,90 @@
 # Brint
 
-A lightweight, reactive HTML rendering library for TypeScript. Brint uses plain arrays and functions to describe UI, with automatic re-rendering when data changes.
+A lightweight, reactive HTML rendering library for TypeScript. Brint uses plain functions and arrays to describe UI, with automatic re-rendering when data changes.
 
 ## Quick Example
 
 ```typescript
 import { create } from 'brint'
+import * as h from 'brint/elements'
 import { ChangeDomain } from 'chchchchanges'
 
 const domain = new ChangeDomain()
 const brint = create({ changeDomain: domain })
 
 // Create reactive state
-const state = domain.enableChanges({ count: 0 })
+const state = domain.changeEnable({ count: 0 })
 
 // Render a counter
 brint.render(
-  ["div", [
-    ["h1", "Counter"],
-    ["p", () => `Count: ${state.count}`],
-    ["button", { on: { click: () => state.count++ } }, "Increment"]
-  ]],
+  h.div([
+    h.h1("Counter"),
+    h.p(() => `Count: ${state.count}`),
+    h.button({ on: { click: () => state.count++ } }, "Increment")
+  ]),
   document.getElementById("app")
 )
 ```
 
 When `state.count` changes, only the `<p>` element updates automatically.
 
-## Core Concepts
-
-### RenderSpec
-
-Everything you render is a **RenderSpec** - a plain value that describes what to render:
-
-```typescript
-// Text
-"Hello World"
-
-// Element: [tagName, attributes?, children?]
-["div", { class: "container" }, "Content"]
-
-// Function (reactive)
-() => `Current time: ${state.time}`
-
-// Component
-[MyComponent, { title: "Hello" }]
-
-// Fragment (multiple siblings)
-[null, ["span", "One"], ["span", "Two"]]
-
-// List
-[List, { items: users, each: (user) => ["li", user.name] }]
-
-// Null (renders nothing)
-null
-```
-
-### Reactivity
-
-Wrap any value in a function to make it reactive:
-
-```typescript
-// Static attribute
-["div", { class: "always-red" }]
-
-// Reactive attribute - updates when state.color changes
-["div", { class: () => state.color }]
-
-// Reactive text
-() => `Hello, ${state.name}!`
-
-// Reactive children
-["ul", () => state.items.map(item => ["li", item])]
-```
-
-Brint uses [chchchchanges](https://github.com/anthropics/chchchchanges) for change detection. Any data accessed inside a reactive function is automatically tracked.
-
 ## Elements
 
-Elements are arrays: `[tagName, attributes?, children?]`
+Import element helpers from `brint/elements`:
 
 ```typescript
+import * as h from 'brint/elements'
+
 // Simple element
-["div"]
+h.div()
 
 // With text child
-["div", "Hello"]
+h.div("Hello")
 
 // With attributes
-["div", { id: "main", class: "container" }]
+h.div({ id: "main", class: "container" })
 
 // With attributes and children
-["div", { class: "card" }, [
-  ["h2", "Title"],
-  ["p", "Content"]
-]]
+h.div({ class: "card" }, [
+  h.h2("Title"),
+  h.p("Content")
+])
 ```
+
+Elements can be called four ways:
+- `h.div()` - empty element
+- `h.div("child")` or `h.div([child1, child2])` - with children
+- `h.div({ class: "foo" })` - with attributes
+- `h.div({ class: "foo" }, "child")` - with both
 
 ### Attributes
 
 ```typescript
-["input", {
+h.input({
   type: "text",
   placeholder: "Enter name",
   disabled: false,           // false = attribute not set
-  required: true,            // true = attribute set to "required"
+  required: true,            // true = attribute set
   class: ["btn", "primary"], // Arrays joined with spaces
-}]
+})
 ```
 
 ### Styles
 
 ```typescript
-["div", {
+h.div({
   style: {
     color: "red",
     fontSize: "16px",
     display: () => state.visible ? "block" : "none"
   }
-}]
+})
 ```
 
 ### Event Listeners
 
 ```typescript
-["button", {
+h.button({
   on: {
     click: (e) => console.log("Clicked!", e),
     mouseenter: {
@@ -132,37 +92,94 @@ Elements are arrays: `[tagName, attributes?, children?]`
       options: { once: true }
     }
   }
-}, "Click me"]
+}, "Click me")
 ```
 
 ### DOM Properties
 
-For properties that can't be set via attributes (like `value` on inputs):
+For properties that can't be set via attributes:
 
 ```typescript
-["input", {
+h.input({
   properties: {
     value: () => state.inputValue
   },
   on: {
     input: (e) => state.inputValue = e.target.value
   }
-}]
+})
 ```
+
+## Reactivity
+
+Wrap any value in a function to make it reactive:
+
+```typescript
+// Static attribute
+h.div({ class: "always-red" })
+
+// Reactive attribute - updates when state.color changes
+h.div({ class: () => state.color })
+
+// Reactive text
+() => `Hello, ${state.name}!`
+
+// Reactive children
+h.ul(() => state.items.map(item => h.li(item)))
+```
+
+Brint uses [chchchchanges](https://github.com/anthropics/chchchchanges) for change detection. Any data accessed inside a reactive function is automatically tracked.
+
+## Fragments
+
+Group multiple elements without a wrapper using `fragment()`:
+
+```typescript
+import { fragment } from 'brint'
+import * as h from 'brint/elements'
+
+fragment(
+  h.header("Top"),
+  h.main("Middle"),
+  h.footer("Bottom")
+)
+```
+
+## Lists
+
+Render arrays efficiently with `list()`:
+
+```typescript
+import { list } from 'brint'
+import * as h from 'brint/elements'
+
+h.ul([
+  list(
+    () => state.todos,
+    (todo) => h.li({ class: todo.done ? "done" : "" }, todo.text)
+  )
+])
+```
+
+List updates are surgical - adding/removing items doesn't re-render siblings.
+
+The first argument can be a static array or a function returning an array (for reactivity).
 
 ## Components
 
 Components are functions that receive props and return a RenderSpec:
 
 ```typescript
+import * as h from 'brint/elements'
+
 const Button = (props) => {
-  return ["button", {
+  return h.button({
     class: props.variant,
     on: props.on
-  }, props.label]
+  }, props.label)
 }
 
-// Use with array syntax
+// Use with array syntax: [Component, props]
 [Button, {
   variant: "primary",
   label: "Submit",
@@ -190,54 +207,64 @@ const Counter = (props, ctx) => {
   // Initialize state (change-enabled automatically)
   ctx.state = { count: props.initial || 0 }
 
-  // Lifecycle
+  // Lifecycle hook
   ctx.onMount(() => {
     console.log("Mounted!")
     return () => console.log("Unmounting...")
   })
 
-  return ["div", [
-    ["span", () => `Count: ${ctx.state.count}`],
-    ["button", { on: { click: () => ctx.state.count++ } }, "+"]
-  ]]
+  return h.div([
+    h.span(() => `Count: ${ctx.state.count}`),
+    h.button({ on: { click: () => ctx.state.count++ } }, "+")
+  ])
 }
 ```
 
-## Lists
+## SVG
 
-Render arrays efficiently with the `List` symbol:
-
-```typescript
-import { create, List } from 'brint'
-
-const { List } = brint
-
-brint.render(
-  ["ul", [
-    List,
-    {
-      items: () => state.todos,
-      each: (todo) => ["li", { class: todo.done ? "done" : "" }, todo.text]
-    }
-  ]],
-  container
-)
-```
-
-List updates are surgical - adding/removing items doesn't re-render the entire list.
-
-## Fragments
-
-Group multiple elements without a wrapper:
+Import SVG elements from `brint/svg`. The `svg()` root element automatically sets the SVG namespace:
 
 ```typescript
-// Fragment with null as first element
-[null,
-  ["header", "Top"],
-  ["main", "Middle"],
-  ["footer", "Bottom"]
-]
+import { svg, circle, rect, path, g, text } from 'brint/svg'
+
+svg({ width: 200, height: 200 }, [
+  circle({ cx: 100, cy: 100, r: 50, fill: "blue" }),
+  rect({ x: 10, y: 10, width: 30, height: 30, fill: "red" }),
+  g({ transform: "translate(50, 50)" }, [
+    path({ d: "M0 0 L20 20", stroke: "black" }),
+    text({ x: 0, y: 30 }, "Hello")
+  ])
+])
 ```
+
+## Under the Hood: RenderSpecs
+
+The helper functions produce **RenderSpecs** - plain arrays and values that describe what to render. Understanding this format is useful for advanced usage:
+
+```typescript
+// Element helpers produce arrays: [tagName, attributes?, children?]
+h.div({ class: "card" }, "Hello")
+// Equivalent to: ["div", { class: "card" }, "Hello"]
+
+// fragment() produces: [null, ...children]
+fragment(child1, child2)
+// Equivalent to: [null, child1, child2]
+
+// list() produces: [List, { items, each }]
+list(items, renderFn)
+// Equivalent to: [List, { items, each: renderFn }]
+
+// Components use array syntax directly: [Component, props?]
+[Counter, { start: 10 }]
+
+// Other RenderSpec types:
+"text"              // Text node
+42                  // Text node (number)
+null                // Renders nothing
+() => renderSpec    // Reactive function
+```
+
+You can use array syntax directly if you prefer, or mix it with helpers.
 
 ## API Reference
 
@@ -259,15 +286,59 @@ const brint = create({
 Renders a RenderSpec into a DOM element. Returns a handle with `unmount()`.
 
 ```typescript
-const handle = brint.render(["div", "Hello"], document.body)
+const handle = brint.render(h.div("Hello"), document.body)
 
 // Later: remove from DOM and clean up
 handle.unmount()
 ```
 
-### `brint.List`
+### `fragment(...children)`
 
-Symbol for list rendering.
+Creates a fragment (multiple siblings without a wrapper).
+
+```typescript
+import { fragment } from 'brint'
+
+fragment(child1, child2, child3)
+```
+
+### `list(items, each)`
+
+Creates a list with surgical updates.
+
+```typescript
+import { list } from 'brint'
+import * as h from 'brint/elements'
+
+// Static items
+list(todos, (todo) => h.li(todo.text))
+
+// Reactive items
+list(() => state.todos, (todo) => h.li(todo.text))
+```
+
+### `brint/elements`
+
+HTML element helpers. Each element is a function that accepts optional attributes and children.
+
+```typescript
+import * as h from 'brint/elements'
+
+// Void elements (no children): h.br, h.hr, h.img, h.input, h.meta, h.link, ...
+// Normal elements: h.div, h.span, h.p, h.a, h.button, h.form, ...
+
+// Or import individually if preferred:
+import { div, span, a } from 'brint/elements'
+```
+
+### `brint/svg`
+
+SVG element helpers. The `svg()` root automatically sets `xmlns`.
+
+```typescript
+import { svg, circle, rect, path, g, ... } from 'brint/svg'
+import * as s from 'brint/svg'  // namespace import
+```
 
 ### RenderContext
 
@@ -279,6 +350,8 @@ interface RenderContext<T> {
   onMount(callback): void     // Lifecycle hook
 }
 ```
+
+The `onMount` callback receives the DOM node (or null for fragments/lists) and can return a cleanup function.
 
 ## Installation
 
