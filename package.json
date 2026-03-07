@@ -16,6 +16,26 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./elements": {
+      "import": {
+        "types": "./dist/elements.d.ts",
+        "default": "./dist/elements.js"
+      },
+      "require": {
+        "types": "./dist/elements.d.cts",
+        "default": "./dist/elements.cjs"
+      }
+    },
+    "./svg": {
+      "import": {
+        "types": "./dist/svg.d.ts",
+        "default": "./dist/svg.js"
+      },
+      "require": {
+        "types": "./dist/svg.d.cts",
+        "default": "./dist/svg.cjs"
+      }
     }
   },
   "files": [

@@ -4,10 +4,6 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-Take a crack at writing the README.md for this library.  Try to get the point across quickly with perhaps an example that looks intuitive.  Cover the general areas of functionality before going into a full reference.
-
-do this on branch nsa-readme
-
 ## Docs and references
 
 When working, remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
