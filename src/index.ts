@@ -193,3 +193,39 @@ export function create(config: BrintConfig): Brint {
     List,
   }
 }
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Create a fragment containing multiple children without a wrapper element.
+ *
+ * @example
+ * fragment(
+ *   ["header", "Top"],
+ *   ["main", "Middle"],
+ *   ["footer", "Bottom"]
+ * )
+ */
+export function fragment(...children: RenderSpec[]): FragmentRenderSpec {
+  return [null, ...children]
+}
+
+/**
+ * Create a list that renders each item using the provided function.
+ * List updates are surgical - adding/removing items doesn't re-render siblings.
+ *
+ * @param items - Array of items or a function returning an array (for reactivity)
+ * @param each - Function that takes an item and returns a RenderSpec
+ *
+ * @example
+ * // Static items
+ * list(todos, (todo) => ["li", todo.text])
+ *
+ * // Reactive items
+ * list(() => state.todos, (todo) => ["li", todo.text])
+ */
+export function list<T>(items: ListSource<T>, each: ListItemFn<T>): ListRenderSpec<T> {
+  return [List, { items, each }]
+}
