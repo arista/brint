@@ -1323,15 +1323,15 @@ function setupListSpec(
   const { items, each } = listItemsSpec
 
   // Helper to render a single item and return the RenderNode
-  const renderItem = (item: unknown): RenderNode => {
-    const childSpec = each(item)
+  const renderItem = (item: unknown, index: number): RenderNode => {
+    const childSpec = each(item, index)
     return render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
   }
 
   // Helper to render all items
   const renderItems = (itemsArray: unknown[]) => {
-    for (const item of itemsArray) {
-      renderItem(item)
+    for (let i = 0; i < itemsArray.length; i++) {
+      renderItem(itemsArray[i], i)
     }
   }
 
@@ -1349,7 +1349,7 @@ function setupListSpec(
   // Helper to render an item and insert at a specific position
   const renderItemAt = (index: number, item: unknown): RenderNode => {
     // Render the item (appends to end)
-    const childRenderNode = renderItem(item)
+    const childRenderNode = renderItem(item, index)
     // Move it to the correct position
     const currentIndex = renderNode.children.indexOf(childRenderNode)
     if (currentIndex !== index && currentIndex !== -1) {
@@ -1363,8 +1363,9 @@ function setupListSpec(
     switch (change.type) {
       case "ArrayPush": {
         // Add new items at the end
-        for (const element of change.elements) {
-          renderItem(element)
+        const startIndex = renderNode.children.length
+        for (let i = 0; i < change.elements.length; i++) {
+          renderItem(change.elements[i], startIndex + i)
         }
         break
       }
