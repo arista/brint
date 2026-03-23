@@ -25,7 +25,7 @@ export type RenderSpec =
   | FunctionRenderSpec
   | ComponentRenderSpec
   | FragmentRenderSpec
-  | ListRenderSpec
+  | ListRenderSpec<any>
 
 export type NullRenderSpec = null | undefined
 
