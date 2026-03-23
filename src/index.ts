@@ -92,6 +92,11 @@ export type FunctionElementValue = () => ResolvedElementValue
 
 export type ComponentRenderSpec = [ComponentFunction, ComponentArgs] | [ComponentFunction]
 
+// Using `any` for props to avoid contravariance issues: components declare specific
+// prop types (e.g., HeaderProps), but ComponentFunction must accept any component.
+// Strict typing here would reject valid components due to parameter contravariance.
+export type ResolvedComponentArgs = any
+
 export type ComponentFunction = (props: ResolvedComponentArgs, ctx: RenderContext) => RenderSpec
 
 export type ComponentArgs = {
@@ -103,8 +108,6 @@ export type NormalComponentArgs = Record<string, ComponentArg>
 export type ComponentArg = (() => unknown) | unknown
 
 export type OnComponentHandlers = Record<string, unknown>
-
-export type ResolvedComponentArgs = Record<string, unknown>
 
 export type FragmentRenderSpec = [null, ...RenderSpec[]]
 
@@ -119,7 +122,7 @@ export type ListSource<T> = T[] | ListSourceFn<T>
 
 export type ListSourceFn<T> = () => T[]
 
-export type ListItemFn<T> = (item: T) => RenderSpec
+export type ListItemFn<T> = (item: T, index: number) => RenderSpec
 
 // ============================================================================
 // RenderContext
@@ -217,14 +220,14 @@ export function fragment(...children: RenderSpec[]): FragmentRenderSpec {
  * List updates are surgical - adding/removing items doesn't re-render siblings.
  *
  * @param items - Array of items or a function returning an array (for reactivity)
- * @param each - Function that takes an item and returns a RenderSpec
+ * @param each - Function that takes an item and index, returns a RenderSpec
  *
  * @example
  * // Static items
- * list(todos, (todo) => ["li", todo.text])
+ * list(todos, (todo, index) => ["li", todo.text])
  *
  * // Reactive items
- * list(() => state.todos, (todo) => ["li", todo.text])
+ * list(() => state.todos, (todo, index) => ["li", todo.text])
  */
 export function list<T>(items: ListSource<T>, each: ListItemFn<T>): ListRenderSpec<T> {
   return [List, { items, each }]
