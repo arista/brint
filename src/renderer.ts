@@ -44,10 +44,20 @@ function isTextRenderSpec(spec: RenderSpec): spec is string | number {
 
 /**
  * Check if a value is an ElementRenderSpec
- * ElementRenderSpec is an array where the first element is a string (tag name)
+ * ElementRenderSpec is an array where:
+ * - First element is a string (tag name)
+ * - Second element is an ElementArgs object (not an array, not null)
+ * This distinguishes it from RenderSpec[] which may start with a string (TextRenderSpec).
  */
 function isElementRenderSpec(spec: RenderSpec): spec is ElementRenderSpec {
-  return Array.isArray(spec) && typeof spec[0] === "string"
+  return (
+    Array.isArray(spec) &&
+    spec.length >= 2 &&
+    typeof spec[0] === "string" &&
+    typeof spec[1] === "object" &&
+    spec[1] !== null &&
+    !Array.isArray(spec[1])
+  )
 }
 
 /**
@@ -97,13 +107,13 @@ function isElementArgs(value: unknown): value is ElementArgs {
 
 /**
  * Check if a value is an array of RenderSpecs (vs a single array-type RenderSpec)
- * Array-type RenderSpecs (Element, Fragment, List, Component) all have a specific first element:
- * - ElementRenderSpec: first element is a string
+ * Array-type RenderSpecs (Element, Fragment, List, Component) have specific patterns:
+ * - ElementRenderSpec: first element is a string AND second is an object (args)
  * - FragmentRenderSpec: first element is null
- * - ListRenderSpec: first element is a symbol
+ * - ListRenderSpec: first element is the List symbol
  * - ComponentRenderSpec: first element is a function
  *
- * If the first element is none of these, it's an array of RenderSpecs.
+ * If the array doesn't match any of these patterns, it's an array of RenderSpecs.
  */
 function isRenderSpecArray(value: unknown): value is RenderSpec[] {
   if (!Array.isArray(value)) {
@@ -113,14 +123,26 @@ function isRenderSpecArray(value: unknown): value is RenderSpec[] {
     return true // Empty array is treated as array of children
   }
   const first = value[0]
-  // If first element is string, null, symbol, or function, it's a single RenderSpec
-  if (
-    typeof first === "string" ||
-    first === null ||
-    typeof first === "symbol" ||
-    typeof first === "function"
-  ) {
+  // FragmentRenderSpec: first element is null
+  if (first === null) {
     return false
+  }
+  // ListRenderSpec: first element is a symbol
+  if (typeof first === "symbol") {
+    return false
+  }
+  // ComponentRenderSpec: first element is a function
+  if (typeof first === "function") {
+    return false
+  }
+  // ElementRenderSpec: first element is string AND second is an object (args)
+  if (typeof first === "string") {
+    const second = value[1]
+    if (typeof second === "object" && second !== null && !Array.isArray(second)) {
+      return false // It's an ElementRenderSpec
+    }
+    // Otherwise it's an array of RenderSpecs starting with a TextRenderSpec
+    return true
   }
   // Otherwise, it's an array of RenderSpecs
   return true
@@ -621,7 +643,12 @@ export function render(
     if (elementXmlns) {
       element = document.createElementNS(elementXmlns, tagName)
     } else {
-      element = document.createElement(tagName)
+      try {
+        element = document.createElement(tagName)
+      } 
+      catch(e) {
+        throw e
+      }
     }
 
     renderNode.node = element

@@ -667,7 +667,7 @@ function makeEl<Args extends BaseSvgElementArgs>(tag: string) {
     children?: Children
   ): ElementRenderSpec {
     if (argsOrChildren === undefined) {
-      return [tag]
+      return [tag, {}]
     }
     if (children !== undefined) {
       return [tag, argsOrChildren as ElementArgs, children]
@@ -675,14 +675,15 @@ function makeEl<Args extends BaseSvgElementArgs>(tag: string) {
     if (isElementArgs(argsOrChildren)) {
       return [tag, argsOrChildren as ElementArgs]
     }
-    return [tag, argsOrChildren as Children]
+    // Children without args - include empty args object
+    return [tag, {}, argsOrChildren as Children]
   }
   return builder
 }
 
 function makeVoidEl<Args extends BaseSvgElementArgs>(tag: string) {
   return (args?: Args): ElementRenderSpec =>
-    args ? [tag, args as ElementArgs] : [tag]
+    args ? [tag, args as ElementArgs] : [tag, {}]
 }
 
 /**
@@ -695,7 +696,7 @@ export function el(
   children?: Children
 ): ElementRenderSpec {
   if (argsOrChildren === undefined) {
-    return [tag]
+    return [tag, {}]
   }
   if (children !== undefined) {
     return [tag, argsOrChildren as ElementArgs, children]
@@ -703,7 +704,8 @@ export function el(
   if (isElementArgs(argsOrChildren)) {
     return [tag, argsOrChildren]
   }
-  return [tag, argsOrChildren]
+  // Children without args - include empty args object
+  return [tag, {}, argsOrChildren]
 }
 
 // ============================================================================

@@ -83,14 +83,14 @@ describe("brint", () => {
       // Simulate: div > [fragmentA > [span, fragmentB > [target]]]
       // When finding previous DOM node for target, should find span
 
-      const divNode = new RenderNode(["div"])
+      const divNode = new RenderNode(["div", {}])
       const divDom = document.createElement("div")
       divNode.node = divDom
 
       const fragmentA = new RenderNode(null) // fragment has no DOM node
       divNode.appendChild(fragmentA)
 
-      const spanNode = new RenderNode(["span"])
+      const spanNode = new RenderNode(["span", {}])
       const spanDom = document.createElement("span")
       spanNode.node = spanDom
       fragmentA.appendChild(spanNode)
@@ -98,7 +98,7 @@ describe("brint", () => {
       const fragmentB = new RenderNode(null) // nested fragment, no DOM node
       fragmentA.appendChild(fragmentB)
 
-      const target = new RenderNode(["p"])
+      const target = new RenderNode(["p", {}])
       fragmentB.appendChild(target)
 
       // target has no prev sibling at its level, but should find span
@@ -108,14 +108,14 @@ describe("brint", () => {
     })
 
     it("should return null when no previous DOM node exists", () => {
-      const divNode = new RenderNode(["div"])
+      const divNode = new RenderNode(["div", {}])
       const divDom = document.createElement("div")
       divNode.node = divDom
 
       const fragment = new RenderNode(null)
       divNode.appendChild(fragment)
 
-      const target = new RenderNode(["p"])
+      const target = new RenderNode(["p", {}])
       fragment.appendChild(target)
 
       // target is first child of fragment, and fragment is first child of div
@@ -185,7 +185,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render(["div"], container)
+        brint.render(["div", {}], container)
 
         assert.equal(container.childNodes.length, 1)
         assert.equal((container.firstChild as Element).tagName, "DIV")
@@ -195,7 +195,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render(["span", "hello"], container)
+        brint.render(["span", {}, "hello"], container)
 
         assert.equal(container.childNodes.length, 1)
         const span = container.firstChild as Element
@@ -218,7 +218,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render(["div", { id: "parent" }, ["span", "child"]], container)
+        brint.render(["div", { id: "parent" }, ["span", {}, "child"]], container)
 
         const div = container.firstChild as Element
         assert.equal(div.getAttribute("id"), "parent")
@@ -237,8 +237,8 @@ describe("brint", () => {
             "div",
             {},
             [
-              ["span", "first"],
-              ["span", "second"],
+              ["span", {}, "first"],
+              ["span", {}, "second"],
             ],
           ],
           container,
@@ -504,7 +504,7 @@ describe("brint", () => {
           [
             "svg",
             { xmlns: "http://www.w3.org/2000/svg" },
-            ["g", [["rect", { x: "0", y: "0", width: "100", height: "100" }]]],
+            ["g", {}, [["rect", { x: "0", y: "0", width: "100", height: "100" }]]],
           ],
           container,
         )
@@ -523,7 +523,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        const handle = brint.render(["div", "hello"], container)
+        const handle = brint.render(["div", {}, "hello"], container)
         assert.equal(container.childNodes.length, 1)
 
         handle.unmount()
@@ -536,7 +536,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render([null, ["span", "first"], ["span", "second"]], container)
+        brint.render([null, ["span", {}, "first"], ["span", {}, "second"]], container)
 
         assert.equal(container.childNodes.length, 2)
         assert.equal((container.childNodes[0] as Element).tagName, "SPAN")
@@ -559,7 +559,7 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         brint.render(
-          ["div", {}, [[null, ["span", "a"], ["span", "b"]], ["p", "c"]]],
+          ["div", {}, [[null, ["span", {}, "a"], ["span", {}, "b"]], ["p", {}, "c"]]],
           container,
         )
 
@@ -578,7 +578,7 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         brint.render(
-          ["div", {}, [["p", "before"], [null, ["span", "a"], ["span", "b"]], ["p", "after"]]],
+          ["div", {}, [["p", {}, "before"], [null, ["span", {}, "a"], ["span", {}, "b"]], ["p", {}, "after"]]],
           container,
         )
 
@@ -599,7 +599,7 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         brint.render(
-          ["div", {}, [["p", "before"], [null, ["span", "a"], ["span", "b"]]]],
+          ["div", {}, [["p", {}, "before"], [null, ["span", {}, "a"], ["span", {}, "b"]]]],
           container,
         )
 
@@ -616,7 +616,7 @@ describe("brint", () => {
 
         // [null, span-a, [null, span-b, span-c], span-d]
         brint.render(
-          [null, ["span", "a"], [null, ["span", "b"], ["span", "c"]], ["span", "d"]],
+          [null, ["span", {}, "a"], [null, ["span", {}, "b"], ["span", {}, "c"]], ["span", {}, "d"]],
           container,
         )
 
@@ -631,7 +631,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render([null, ["span", "a"], null, ["span", "b"]], container)
+        brint.render([null, ["span", {}, "a"], null, ["span", {}, "b"]], container)
 
         assert.equal(container.childNodes.length, 2)
         assert.equal((container.childNodes[0] as Element).textContent, "a")
@@ -658,7 +658,7 @@ describe("brint", () => {
             "div",
             {},
             [
-              [null, ["span", "1"], [null, ["span", "2"], [null, ["span", "3"]]]],
+              [null, ["span", {}, "1"], [null, ["span", {}, "2"], [null, ["span", {}, "3"]]]],
             ],
           ],
           container,
@@ -696,7 +696,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        const handle = brint.render([null, ["span", "a"], ["span", "b"]], container)
+        const handle = brint.render([null, ["span", {}, "a"], ["span", {}, "b"]], container)
 
         assert.equal(container.childNodes.length, 2)
 
@@ -942,7 +942,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render(() => ["div", "hello"], container)
+        brint.render(() => ["div", {}, "hello"], container)
 
         assert.equal(container.childNodes.length, 1)
         const div = container.firstChild as Element
@@ -975,7 +975,7 @@ describe("brint", () => {
 
         const state = domain.enableChanges({ count: 0 })
 
-        brint.render(() => ["span", String(state.count)], container)
+        brint.render(() => ["span", {}, String(state.count)], container)
 
         const span = container.firstChild as Element
         assert.equal(span.textContent, "0")
@@ -1013,7 +1013,7 @@ describe("brint", () => {
 
         const state = domain.enableChanges({ useDiv: true })
 
-        brint.render(() => (state.useDiv ? ["div", "content"] : ["span", "content"]), container)
+        brint.render(() => (state.useDiv ? ["div", {}, "content"] : ["span", {}, "content"]), container)
 
         assert.equal((container.firstChild as Element).tagName, "DIV")
 
@@ -1031,7 +1031,7 @@ describe("brint", () => {
 
         // Use fragment syntax [null, ...children] to embed a function
         brint.render(
-          () => ["div", {}, [null, () => ["span", state.value]]],
+          () => ["div", {}, [null, () => ["span", {}, state.value]]],
           container,
         )
 
@@ -1055,7 +1055,7 @@ describe("brint", () => {
 
         const handle = brint.render(() => {
           callCount++
-          return ["div", state.value]
+          return ["div", {}, state.value]
         }, container)
 
         assert.equal(callCount, 1)
@@ -1080,7 +1080,7 @@ describe("brint", () => {
 
         brint.render((ctx) => {
           receivedCtx = ctx
-          return ["div", "test"]
+          return ["div", {}, "test"]
         }, container)
 
         assert.notEqual(receivedCtx, null)
@@ -1093,7 +1093,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        const MyComponent = () => ["div", "hello from component"]
+        const MyComponent = () => ["div", {}, "hello from component"]
 
         brint.render([MyComponent], container)
 
@@ -1107,7 +1107,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        const MyComponent = (props: { name: string }) => ["div", `Hello, ${props.name}!`]
+        const MyComponent = (props: { name: string }) => ["div", {}, `Hello, ${props.name}!`]
 
         brint.render([MyComponent, { name: "World" }], container)
 
@@ -1120,7 +1120,7 @@ describe("brint", () => {
 
         const state = domain.enableChanges({ name: "World" })
 
-        const MyComponent = (props: { name: string }) => ["div", `Hello, ${props.name}!`]
+        const MyComponent = (props: { name: string }) => ["div", {}, `Hello, ${props.name}!`]
 
         brint.render([MyComponent, { name: () => state.name }], container)
 
@@ -1141,7 +1141,7 @@ describe("brint", () => {
 
         const Counter = (props: { count: number }) => {
           renderCount++
-          return ["span", String(props.count)]
+          return ["span", {}, String(props.count)]
         }
 
         brint.render([Counter, { count: () => state.count }], container)
@@ -1184,7 +1184,7 @@ describe("brint", () => {
 
         const MyComponent = (_props: Record<string, unknown>, ctx: unknown) => {
           receivedCtx = ctx
-          return ["div", "test"]
+          return ["div", {}, "test"]
         }
 
         brint.render([MyComponent, {}], container)
@@ -1200,7 +1200,7 @@ describe("brint", () => {
         const state = domain.enableChanges({ dynamic: "reactive" })
 
         const MyComponent = (props: { static: string; dynamic: string }) => {
-          return ["div", `${props.static} ${props.dynamic}`]
+          return ["div", {}, `${props.static} ${props.dynamic}`]
         }
 
         brint.render([MyComponent, { static: "static", dynamic: () => state.dynamic }], container)
@@ -1221,7 +1221,7 @@ describe("brint", () => {
 
         const MyComponent = (props: { value: string }) => {
           renderCount++
-          return ["div", props.value]
+          return ["div", {}, props.value]
         }
 
         const handle = brint.render([MyComponent, { value: () => state.value }], container)
@@ -1253,7 +1253,7 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        const FragmentComponent = () => [null, ["span", "a"], ["span", "b"]]
+        const FragmentComponent = () => [null, ["span", {}, "a"], ["span", {}, "b"]]
 
         brint.render([FragmentComponent], container)
 
@@ -1284,7 +1284,7 @@ describe("brint", () => {
             List,
             {
               items: ["a", "b", "c"],
-              each: (item: string) => ["li", item],
+              each: (item: string) => ["li", {}, item],
             },
           ],
           container,
@@ -1308,7 +1308,7 @@ describe("brint", () => {
             List,
             {
               items: () => state.items,
-              each: (item: string) => ["span", item],
+              each: (item: string) => ["span", {}, item],
             },
           ],
           container,
@@ -1330,7 +1330,7 @@ describe("brint", () => {
             List,
             {
               items: () => state.items,
-              each: (item: number) => ["div", String(item)],
+              each: (item: number) => ["div", {}, String(item)],
             },
           ],
           container,
@@ -1355,7 +1355,7 @@ describe("brint", () => {
             List,
             {
               items: [],
-              each: (item: unknown) => ["div", String(item)],
+              each: (item: unknown) => ["div", {}, String(item)],
             },
           ],
           container,
@@ -1373,7 +1373,7 @@ describe("brint", () => {
             List,
             {
               items: [1, 2, 3],
-              each: (item: number) => (item === 2 ? null : ["span", String(item)]),
+              each: (item: number) => (item === 2 ? null : ["span", {}, String(item)]),
             },
           ],
           container,
@@ -1394,7 +1394,7 @@ describe("brint", () => {
             List,
             {
               items: ["a", "b"],
-              each: (item: string) => [null, ["span", `${item}1`], ["span", `${item}2`]],
+              each: (item: string) => [null, ["span", {}, `${item}1`], ["span", {}, `${item}2`]],
             },
           ],
           container,
@@ -1421,7 +1421,7 @@ describe("brint", () => {
               items: () => state.items,
               each: (item: string) => {
                 renderCount++
-                return ["div", item]
+                return ["div", {}, item]
               },
             },
           ],
@@ -1453,7 +1453,7 @@ describe("brint", () => {
               items: () => state.items,
               each: (item: string) => {
                 renderCount++
-                return ["span", item]
+                return ["span", {}, item]
               },
             },
           ],
@@ -1479,11 +1479,12 @@ describe("brint", () => {
         brint.render(
           [
             "ul",
+            {},
             [
               List,
               {
                 items: ["one", "two"],
-                each: (item: string) => ["li", item],
+                each: (item: string) => ["li", {}, item],
               },
             ],
           ],
@@ -1543,7 +1544,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1575,7 +1576,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1608,7 +1609,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1639,7 +1640,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1672,7 +1673,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1704,7 +1705,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1738,7 +1739,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1772,7 +1773,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1805,7 +1806,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: string) => {
                   renderCount++
-                  return ["span", item]
+                  return ["span", {}, item]
                 },
               },
             ],
@@ -1839,7 +1840,7 @@ describe("brint", () => {
                 items: () => items,
                 each: (item: number) => {
                   renderCount++
-                  return ["span", String(item)]
+                  return ["span", {}, String(item)]
                 },
               },
             ],
@@ -1869,7 +1870,7 @@ describe("brint", () => {
               List,
               {
                 items: () => items,
-                each: (item: string) => ["span", item],
+                each: (item: string) => ["span", {}, item],
               },
             ],
             container,
@@ -2015,7 +2016,7 @@ describe("brint", () => {
           const state = domain.enableChanges({ items: ["a", "b", "c"] as string[] })
 
           brint.render(
-            () => ["ul", state.items.map((item: string) => ["li", item])],
+            () => ["ul", {}, state.items.map((item: string) => ["li", {}, item])],
             container,
           )
 
@@ -2042,7 +2043,8 @@ describe("brint", () => {
           brint.render(
             () => [
               "div",
-              Array.from({ length: state.count }, (_, i) => ["span", String(i)]),
+              {},
+              Array.from({ length: state.count }, (_, i) => ["span", {}, String(i)]),
             ],
             container,
           )
@@ -2088,8 +2090,8 @@ describe("brint", () => {
           brint.render(
             () =>
               state.show
-                ? [null, ["span", "a"], ["span", "b"], ["span", "c"]]
-                : [null, ["span", "x"], ["span", "y"]],
+                ? [null, ["span", {}, "a"], ["span", {}, "b"], ["span", {}, "c"]]
+                : [null, ["span", {}, "x"], ["span", {}, "y"]],
             container,
           )
 
@@ -2111,7 +2113,7 @@ describe("brint", () => {
 
           const state = domain.enableChanges({ useDiv: true })
 
-          brint.render(() => (state.useDiv ? ["div", "content"] : ["span", "content"]), container)
+          brint.render(() => (state.useDiv ? ["div", {}, "content"] : ["span", {}, "content"]), container)
 
           const divBefore = container.firstChild as HTMLDivElement
           assert.equal(divBefore.tagName, "DIV")
@@ -2130,7 +2132,7 @@ describe("brint", () => {
 
           const state = domain.enableChanges({ useElement: true })
 
-          brint.render(() => (state.useElement ? ["div", "content"] : "just text"), container)
+          brint.render(() => (state.useElement ? ["div", {}, "content"] : "just text"), container)
 
           assert.equal((container.firstChild as Element).tagName, "DIV")
 
@@ -2146,7 +2148,7 @@ describe("brint", () => {
 
           const state = domain.enableChanges({ useElement: false })
 
-          brint.render(() => (state.useElement ? ["div", "content"] : "just text"), container)
+          brint.render(() => (state.useElement ? ["div", {}, "content"] : "just text"), container)
 
           assert.equal(container.textContent, "just text")
 
@@ -2164,7 +2166,7 @@ describe("brint", () => {
           const state = domain.enableChanges({ deep: "original" })
 
           brint.render(
-            () => ["div", ["section", ["article", ["p", state.deep]]]],
+            () => ["div", {}, ["section", {}, ["article", {}, ["p", {}, state.deep]]]],
             container,
           )
 
@@ -2184,10 +2186,10 @@ describe("brint", () => {
 
           const MyComponent = (props: { mode: string }) => {
             if (props.mode === "simple") {
-              return ["div", "simple mode"]
+              return ["div", {}, "simple mode"]
             }
             // Use array wrapper for multiple children
-            return ["div", [["span", "complex"], ["span", "mode"]]]
+            return ["div", {}, [["span", {}, "complex"], ["span", {}, "mode"]]]
           }
 
           brint.render([MyComponent, { mode: () => state.mode }], container)
@@ -2226,7 +2228,7 @@ describe("brint", () => {
               if (renderCount === 1) {
                 ctx.state = { count: 0 }
               }
-              return ["div", () => `Count: ${ctx.state.count}`]
+              return ["div", {}, () => `Count: ${ctx.state.count}`]
             },
             container,
           )
@@ -2249,7 +2251,7 @@ describe("brint", () => {
                 ctx.state = { count: 0 }
                 savedCtx = ctx as { state: { count: number } }
               }
-              return ["div", () => `Count: ${ctx.state.count}`]
+              return ["div", {}, () => `Count: ${ctx.state.count}`]
             },
             container,
           )
@@ -2277,7 +2279,7 @@ describe("brint", () => {
                 mountCalled = true
                 nodeReceived = node
               })
-              return ["div", "hello"]
+              return ["div", {}, "hello"]
             },
             container,
           )
@@ -2298,7 +2300,7 @@ describe("brint", () => {
               ctx.onMount(() => {
                 callOrder.push("child")
               })
-              return ["span", "child"]
+              return ["span", {}, "child"]
             }
           }
 
@@ -2329,7 +2331,7 @@ describe("brint", () => {
                   cleanupCalled = true
                 }
               })
-              return ["div", "hello"]
+              return ["div", {}, "hello"]
             },
             container,
           )
@@ -2354,7 +2356,7 @@ describe("brint", () => {
                   cleanupOrder.push("child")
                 }
               })
-              return ["span", "child"]
+              return ["span", {}, "child"]
             }
           }
 
@@ -2430,7 +2432,7 @@ describe("brint", () => {
                   ctx.state = { initialized: true, value: version * 10 }
                 }
                 stateValues.push(ctx.state.value)
-                return ["div", `State: ${ctx.state.value}`]
+                return ["div", {}, `State: ${ctx.state.value}`]
               }
             },
             container,

@@ -33,9 +33,9 @@ export type TextRenderSpec = string | number
 
 export type FunctionRenderSpec = (ctx: RenderContext) => RenderSpec
 
+// ElementRenderSpec always requires an ElementArgs object as the second element.
+// This distinguishes it from RenderSpec[] (array of children) which may start with a string.
 export type ElementRenderSpec =
-  | [ElementName]
-  | [ElementName, ElementChildRenderSpecs]
   | [ElementName, ElementArgs]
   | [ElementName, ElementArgs, ElementChildRenderSpecs]
 
