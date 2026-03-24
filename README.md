@@ -242,9 +242,17 @@ svg({ width: 200, height: 200 }, [
 The helper functions produce **RenderSpecs** - plain arrays and values that describe what to render. Understanding this format is useful for advanced usage:
 
 ```typescript
-// Element helpers produce arrays: [tagName, attributes?, children?]
+// Element helpers produce arrays: [tagName, attributes, children?]
 h.div({ class: "card" }, "Hello")
 // Equivalent to: ["div", { class: "card" }, "Hello"]
+
+h.div("Hello")
+// Equivalent to: ["div", {}, "Hello"]
+
+// Note: The attributes object is always required in raw array syntax.
+// This distinguishes elements from arrays of children.
+// ["div", "text"] would be ambiguous - is it an element or two text children?
+// Use ["div", {}, "text"] for elements, or just ["text1", "text2"] for children.
 
 // fragment() produces: [null, ...children]
 fragment(child1, child2)
@@ -264,7 +272,7 @@ null                // Renders nothing
 () => renderSpec    // Reactive function
 ```
 
-You can use array syntax directly if you prefer, or mix it with helpers.
+You can use array syntax directly if you prefer, or mix it with helpers. When using the `h.*` helpers, you don't need to worry about the attributes object - the helpers handle it automatically.
 
 ## API Reference
 
