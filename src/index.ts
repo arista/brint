@@ -232,3 +232,26 @@ export function fragment(...children: RenderSpec[]): FragmentRenderSpec {
 export function list<T>(items: ListSource<T>, each: ListItemFn<T>): ListRenderSpec<T> {
   return [List, { items, each }]
 }
+
+/**
+ * Create a type-safe component render spec.
+ *
+ * Using `[Component, props]` directly doesn't type-check the props.
+ * This helper provides proper type inference for component props.
+ *
+ * @param fn - The component function
+ * @param props - Props to pass to the component (type-checked against fn's parameter type)
+ *
+ * @example
+ * // Instead of:
+ * [MyComponent, { title: "Hello" }]  // No type checking
+ *
+ * // Use:
+ * component(MyComponent, { title: "Hello" })  // Type-checked!
+ */
+export function component<P extends object>(
+  fn: (props: P, ctx: RenderContext) => RenderSpec,
+  props: P,
+): ComponentRenderSpec {
+  return [fn as ComponentFunction, props as ComponentArgs]
+}
