@@ -23,7 +23,6 @@ export type RenderSpec =
   | TextRenderSpec
   | ElementRenderSpec
   | FunctionRenderSpec
-  | ComponentRenderSpec
   | FragmentRenderSpec
   | ListRenderSpec<any>
 
@@ -90,25 +89,6 @@ export type ResolvedArrayElementValueItem = PrimitiveElementValue | PrimitiveEle
 
 export type FunctionElementValue = () => ResolvedElementValue
 
-export type ComponentRenderSpec = [ComponentFunction, ComponentArgs] | [ComponentFunction]
-
-// Using `any` for props to avoid contravariance issues: components declare specific
-// prop types (e.g., HeaderProps), but ComponentFunction must accept any component.
-// Strict typing here would reject valid components due to parameter contravariance.
-export type ResolvedComponentArgs = any
-
-export type ComponentFunction = (props: ResolvedComponentArgs, ctx: RenderContext) => RenderSpec
-
-export type ComponentArgs = {
-  on?: OnComponentHandlers
-} & NormalComponentArgs
-
-export type NormalComponentArgs = Record<string, ComponentArg>
-
-export type ComponentArg = (() => unknown) | unknown
-
-export type OnComponentHandlers = Record<string, unknown>
-
 export type FragmentRenderSpec = [null, ...RenderSpec[]]
 
 export type ListRenderSpec<T = unknown> = [typeof List, ListItemsSpec<T>]
@@ -137,7 +117,7 @@ export type OnMountCallback = (node: Node | null) => void | (() => void)
 
 /**
  * RenderContext provides lifecycle notifications and state management
- * for FunctionRenderSpec and ComponentRenderSpec.
+ * for FunctionRenderSpec.
  */
 export interface RenderContext<T = unknown> {
   /**
@@ -234,24 +214,20 @@ export function list<T>(items: ListSource<T>, each: ListItemFn<T>): ListRenderSp
 }
 
 /**
- * Create a type-safe component render spec.
+ * Create a type-safe component from a function and props.
  *
- * Using `[Component, props]` directly doesn't type-check the props.
+ * Components are just functions that receive props and a RenderContext.
  * This helper provides proper type inference for component props.
  *
  * @param fn - The component function
  * @param props - Props to pass to the component (type-checked against fn's parameter type)
  *
  * @example
- * // Instead of:
- * [MyComponent, { title: "Hello" }]  // No type checking
- *
- * // Use:
  * component(MyComponent, { title: "Hello" })  // Type-checked!
  */
-export function component<P extends object>(
+export function component<P>(
   fn: (props: P, ctx: RenderContext) => RenderSpec,
   props: P,
-): ComponentRenderSpec {
-  return [fn as ComponentFunction, props as ComponentArgs]
+): FunctionRenderSpec {
+  return (ctx) => fn(props, ctx)
 }

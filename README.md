@@ -169,7 +169,7 @@ The first argument can be a static array or a function returning an array (for r
 
 ## Components
 
-Components are functions that receive props and return a RenderSpec:
+Components are functions that receive props and optionally a RenderContext:
 
 ```typescript
 import * as h from 'brint/elements'
@@ -181,36 +181,25 @@ const Button = (props) => {
   }, props.label)
 }
 
-// Use with array syntax: [Component, props]
-[Button, {
-  variant: "primary",
-  label: "Submit",
-  on: { click: () => handleSubmit() }
-}]
-```
-
-For type-safe props, use the `component()` helper:
-
-```typescript
-import { component } from 'brint'
-
-// Props are type-checked against Button's parameter type
-component(Button, {
+// Just call the component function
+Button({
   variant: "primary",
   label: "Submit",
   on: { click: () => handleSubmit() }
 })
 ```
 
-### Reactive Props
-
-Function props are automatically reactive:
+For type-safe props and access to RenderContext, use the `component()` helper:
 
 ```typescript
-[Button, {
-  label: () => state.isLoading ? "Loading..." : "Submit",
-  disabled: () => state.isLoading
-}]
+import { component } from 'brint'
+
+// Props are type-checked, component receives RenderContext
+component(Button, {
+  variant: "primary",
+  label: "Submit",
+  on: { click: () => handleSubmit() }
+})
 ```
 
 ### Component State
@@ -237,7 +226,7 @@ const Counter = (props, ctx) => {
 
 ### Component Reactivity
 
-Components are inherently reactive. The entire component function runs inside a change-detection context, so any change-enabled data accessed during execution becomes a dependency. When that data changes, the component re-renders.
+When used with the `component()` helper, component functions run inside a change-detection context. Any change-enabled data accessed during execution becomes a dependency. When that data changes, the component re-renders.
 
 ```typescript
 const Greeting = (props) => {
@@ -246,7 +235,7 @@ const Greeting = (props) => {
 }
 
 // If user is change-enabled, changing user.name will re-render Greeting
-[Greeting, { user: state.user }]
+component(Greeting, { user: state.user })
 ```
 
 #### Pitfall 1: Passing extracted values as props
@@ -255,16 +244,13 @@ When you extract a primitive value and pass it as a prop, the value is captured 
 
 ```typescript
 // BROKEN: state.count is evaluated immediately, component receives static value
-[Counter, { value: state.count }]  // just passes 42, won't update
-
-// WORKS: function is evaluated inside change-detection
-[Counter, { value: () => state.count }]
+component(Counter, { value: state.count })  // just passes 42, won't update
 
 // WORKS: object is passed, property access happens inside component
-[Counter, { state: state }]  // component accesses state.count
+component(Counter, { state: state })  // component accesses state.count
 ```
 
-**Rule of thumb:** Pass objects, not extracted primitive values. If you must pass a primitive, wrap it in a function.
+**Rule of thumb:** Pass objects, not extracted primitive values.
 
 This pitfall is usually obvious—your UI won't update when you expect it to.
 
@@ -347,8 +333,9 @@ fragment(child1, child2)
 list(items, renderFn)
 // Equivalent to: [List, { items, each: renderFn }]
 
-// Components use array syntax directly: [Component, props?]
-[Counter, { start: 10 }]
+// component() produces a FunctionRenderSpec
+component(Counter, { start: 10 })
+// Equivalent to: (ctx) => Counter({ start: 10 }, ctx)
 
 // Other RenderSpec types:
 "text"              // Text node
@@ -412,12 +399,13 @@ list(() => state.todos, (todo) => h.li(todo.text))
 
 ### `component(fn, props)`
 
-Creates a type-safe component render spec. Use this instead of `[Component, props]` when you want TypeScript to check your props.
+Creates a type-safe component from a function and props. Returns a FunctionRenderSpec that passes props to your component function along with a RenderContext.
 
 ```typescript
 import { component } from 'brint'
 
-component(MyComponent, { title: "Hello" })  // Props are type-checked
+// Type-safe props, component receives RenderContext for state and lifecycle
+component(MyComponent, { title: "Hello" })
 ```
 
 ### `brint/elements`
@@ -445,7 +433,7 @@ import * as s from 'brint/svg'  // namespace import
 
 ### RenderContext
 
-Available in function and component specs:
+Available in FunctionRenderSpec (including components created with `component()`):
 
 ```typescript
 interface RenderContext<T> {
