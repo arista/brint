@@ -6,8 +6,6 @@ import type {
   ElementChildRenderSpecs,
   FragmentRenderSpec,
   FunctionRenderSpec,
-  ComponentRenderSpec,
-  ComponentArgs,
   RenderContext,
   ListRenderSpec,
   ListItemsSpec,
@@ -16,7 +14,6 @@ import { List } from "./index.js"
 import {
   RenderNode,
   type ReactiveElementValue,
-  type RenderNodeComponentProp,
   type RenderNodeEventListener,
 } from "./render-node.js"
 
@@ -77,14 +74,6 @@ function isFunctionRenderSpec(spec: RenderSpec): spec is FunctionRenderSpec {
 }
 
 /**
- * Check if a value is a ComponentRenderSpec
- * ComponentRenderSpec is an array where the first element is a function
- */
-function isComponentRenderSpec(spec: RenderSpec): spec is ComponentRenderSpec {
-  return Array.isArray(spec) && typeof spec[0] === "function"
-}
-
-/**
  * Check if a value is a ListRenderSpec
  * ListRenderSpec is an array where the first element is the List symbol
  */
@@ -107,11 +96,10 @@ function isElementArgs(value: unknown): value is ElementArgs {
 
 /**
  * Check if a value is an array of RenderSpecs (vs a single array-type RenderSpec)
- * Array-type RenderSpecs (Element, Fragment, List, Component) have specific patterns:
+ * Array-type RenderSpecs (Element, Fragment, List) have specific patterns:
  * - ElementRenderSpec: first element is a string AND second is an object (args)
  * - FragmentRenderSpec: first element is null
  * - ListRenderSpec: first element is the List symbol
- * - ComponentRenderSpec: first element is a function
  *
  * If the array doesn't match any of these patterns, it's an array of RenderSpecs.
  */
@@ -129,10 +117,6 @@ function isRenderSpecArray(value: unknown): value is RenderSpec[] {
   }
   // ListRenderSpec: first element is a symbol
   if (typeof first === "symbol") {
-    return false
-  }
-  // ComponentRenderSpec: first element is a function
-  if (typeof first === "function") {
     return false
   }
   // ElementRenderSpec: first element is string AND second is an object (args)
@@ -712,16 +696,6 @@ export function render(
     return renderNode
   }
 
-  if (isComponentRenderSpec(spec)) {
-    // ComponentRenderSpec: wrap props in CachedFunctions, call component
-    const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
-    const childSpec = setupComponentSpec(renderNode, spec, actualParentDomNode, xmlns, domain)
-    render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
-    // Call onMount callbacks after children are rendered (bottom-up order)
-    callOnMountCallbacks(renderNode)
-    return renderNode
-  }
-
   if (isListRenderSpec(spec)) {
     // ListRenderSpec: wrap items in CachedFunction, render each item as a child
     const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
@@ -789,16 +763,6 @@ function cleanupRenderNode(renderNode: RenderNode): void {
   if (renderNode.functionCachedFunction) {
     renderNode.functionCachedFunction.remove()
     renderNode.functionCachedFunction = null
-  }
-  if (renderNode.componentProps) {
-    for (const prop of renderNode.componentProps.values()) {
-      prop.cachedFunction.remove()
-    }
-    renderNode.componentProps = null
-  }
-  if (renderNode.componentCachedFunction) {
-    renderNode.componentCachedFunction.remove()
-    renderNode.componentCachedFunction = null
   }
   if (renderNode.listItemsCachedFunction) {
     renderNode.listItemsCachedFunction.remove()
@@ -961,10 +925,6 @@ function canReconcile(spec: RenderSpec, existingNode: RenderNode): boolean {
     return true
   }
 
-  if (isComponentRenderSpec(spec) && isComponentRenderSpec(existingSpec)) {
-    return true
-  }
-
   if (isListRenderSpec(spec) && isListRenderSpec(existingSpec)) {
     return true
   }
@@ -1019,12 +979,6 @@ function reconcile(
   if (isFunctionRenderSpec(spec)) {
     // FunctionRenderSpec: clean up old CachedFunction, set up new one
     reconcileFunctionSpec(spec, existingNode, parentDomNode, xmlns, domain)
-    return
-  }
-
-  if (isComponentRenderSpec(spec)) {
-    // ComponentRenderSpec: clean up old state, set up new component
-    reconcileComponentSpec(spec, existingNode, parentDomNode, xmlns, domain)
     return
   }
 
@@ -1265,69 +1219,6 @@ function setupFunctionSpec(
   // Set up listener for re-rendering on invalidation
   cf.addListener(() => {
     const newChildSpec = cf.call() as RenderSpec
-    renderOver(newChildSpec, renderNode, actualParentDomNode, xmlns, domain)
-  })
-
-  return childSpec
-}
-
-/**
- * Set up a ComponentRenderSpec on a RenderNode.
- * Processes props, creates CachedFunctions, sets up the re-render listener, and returns the initial child spec.
- * This is shared between initial render and reconciliation.
- */
-function setupComponentSpec(
-  renderNode: RenderNode,
-  spec: ComponentRenderSpec,
-  actualParentDomNode: Node | null,
-  xmlns: string | null,
-  domain: ChangeDomain,
-): RenderSpec {
-  const [componentFn, componentArgs] = spec
-  const ctx = createRenderContext(renderNode, domain)
-
-  // Process component props - wrap functions in CachedFunctions (except "on")
-  const staticProps: Record<string, unknown> = {}
-  const reactivePropCFs: Map<string, RenderNodeComponentProp> = new Map()
-
-  if (componentArgs) {
-    for (const [key, value] of Object.entries(componentArgs)) {
-      if (key === "on") {
-        // "on" handlers are passed through without wrapping
-        staticProps[key] = value
-      } else if (typeof value === "function") {
-        // Wrap reactive prop in CachedFunction
-        const cf = domain.createCachedFunction(value as () => unknown)
-        reactivePropCFs.set(key, { cachedFunction: cf })
-      } else {
-        // Static prop
-        staticProps[key] = value
-      }
-    }
-  }
-
-  // Store reactive props if any
-  if (reactivePropCFs.size > 0) {
-    renderNode.componentProps = reactivePropCFs
-  }
-
-  // Create componentCachedFunction that resolves props and calls component
-  const componentCF = domain.createCachedFunction(() => {
-    // Build resolved props by combining static props and calling reactive CFs
-    const resolvedProps: Record<string, unknown> = { ...staticProps }
-    for (const [key, prop] of reactivePropCFs) {
-      resolvedProps[key] = prop.cachedFunction.call()
-    }
-    return componentFn(resolvedProps, ctx)
-  })
-  renderNode.componentCachedFunction = componentCF
-
-  // Get initial child spec
-  const childSpec = componentCF.call() as RenderSpec
-
-  // Set up listener for re-rendering on invalidation
-  componentCF.addListener(() => {
-    const newChildSpec = componentCF.call() as RenderSpec
     renderOver(newChildSpec, renderNode, actualParentDomNode, xmlns, domain)
   })
 
@@ -1624,49 +1515,6 @@ function reconcileFunctionSpec(
     reconcile(childSpec, existingChild, actualParentDomNode, xmlns, domain)
   } else {
     // Remove old children and render new
-    cleanupLeftoverChildren(existingNode, 0)
-    render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
-  }
-
-  // Call onMount callbacks (mount part of reconciliation)
-  callOnMountCallbacks(existingNode)
-}
-
-/**
- * Reconcile a ComponentRenderSpec with an existing component RenderNode
- */
-function reconcileComponentSpec(
-  spec: ComponentRenderSpec,
-  existingNode: RenderNode,
-  parentDomNode: Node | null,
-  xmlns: string | null,
-  domain: ChangeDomain,
-): void {
-  // Call lifecycle cleanups (unmount part of reconciliation)
-  callLifecycleCleanups(existingNode)
-
-  // Clean up old component state
-  if (existingNode.componentProps) {
-    for (const prop of existingNode.componentProps.values()) {
-      prop.cachedFunction.remove()
-    }
-    existingNode.componentProps = null
-  }
-  if (existingNode.componentCachedFunction) {
-    existingNode.componentCachedFunction.remove()
-    existingNode.componentCachedFunction = null
-  }
-
-  const actualParentDomNode = parentDomNode || existingNode.findParentDomNode()
-
-  // Set up the new component spec (creates CachedFunctions, sets up listener)
-  const childSpec = setupComponentSpec(existingNode, spec, actualParentDomNode, xmlns, domain)
-
-  // Try to reconcile with existing child if possible
-  const existingChild = existingNode.children[0]
-  if (existingChild && canReconcile(childSpec, existingChild)) {
-    reconcile(childSpec, existingChild, actualParentDomNode, xmlns, domain)
-  } else {
     cleanupLeftoverChildren(existingNode, 0)
     render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
   }

@@ -1088,181 +1088,6 @@ describe("brint", () => {
       })
     })
 
-    describe("ComponentRenderSpec", () => {
-      it("should render a component with no props", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const MyComponent = () => ["div", {}, "hello from component"]
-
-        brint.render([MyComponent], container)
-
-        assert.equal(container.childNodes.length, 1)
-        const div = container.firstChild as Element
-        assert.equal(div.tagName, "DIV")
-        assert.equal(div.textContent, "hello from component")
-      })
-
-      it("should render a component with static props", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const MyComponent = (props: { name: string }) => ["div", {}, `Hello, ${props.name}!`]
-
-        brint.render([MyComponent, { name: "World" }], container)
-
-        assert.equal(container.textContent, "Hello, World!")
-      })
-
-      it("should render a component with reactive props", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const state = domain.enableChanges({ name: "World" })
-
-        const MyComponent = (props: { name: string }) => ["div", {}, `Hello, ${props.name}!`]
-
-        brint.render([MyComponent, { name: () => state.name }], container)
-
-        assert.equal(container.textContent, "Hello, World!")
-
-        // Update the state
-        state.name = "Universe"
-
-        assert.equal(container.textContent, "Hello, Universe!")
-      })
-
-      it("should re-render when reactive prop changes", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const state = domain.enableChanges({ count: 0 })
-        let renderCount = 0
-
-        const Counter = (props: { count: number }) => {
-          renderCount++
-          return ["span", {}, String(props.count)]
-        }
-
-        brint.render([Counter, { count: () => state.count }], container)
-
-        assert.equal(renderCount, 1)
-        assert.equal(container.textContent, "0")
-
-        state.count = 5
-
-        assert.equal(renderCount, 2)
-        assert.equal(container.textContent, "5")
-      })
-
-      it("should pass on handlers without wrapping", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        let clickCount = 0
-        const handleClick = () => {
-          clickCount++
-        }
-
-        const Button = (props: { on?: { click: () => void } }) => {
-          return ["button", { on: props.on }, "Click me"]
-        }
-
-        brint.render([Button, { on: { click: handleClick } }], container)
-
-        const button = container.firstChild as HTMLButtonElement
-        button.click()
-
-        assert.equal(clickCount, 1)
-      })
-
-      it("should pass RenderContext to component", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        let receivedCtx: unknown = null
-
-        const MyComponent = (_props: Record<string, unknown>, ctx: unknown) => {
-          receivedCtx = ctx
-          return ["div", {}, "test"]
-        }
-
-        brint.render([MyComponent, {}], container)
-
-        assert.notEqual(receivedCtx, null)
-        assert.equal(typeof receivedCtx, "object")
-      })
-
-      it("should handle mixed static and reactive props", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const state = domain.enableChanges({ dynamic: "reactive" })
-
-        const MyComponent = (props: { static: string; dynamic: string }) => {
-          return ["div", {}, `${props.static} ${props.dynamic}`]
-        }
-
-        brint.render([MyComponent, { static: "static", dynamic: () => state.dynamic }], container)
-
-        assert.equal(container.textContent, "static reactive")
-
-        state.dynamic = "updated"
-
-        assert.equal(container.textContent, "static updated")
-      })
-
-      it("should cleanup component CachedFunctions on unmount", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const state = domain.enableChanges({ value: "test" })
-        let renderCount = 0
-
-        const MyComponent = (props: { value: string }) => {
-          renderCount++
-          return ["div", {}, props.value]
-        }
-
-        const handle = brint.render([MyComponent, { value: () => state.value }], container)
-
-        assert.equal(renderCount, 1)
-
-        state.value = "updated"
-        assert.equal(renderCount, 2)
-
-        handle.unmount()
-
-        // After unmount, updates should NOT trigger re-render
-        state.value = "after unmount"
-        assert.equal(renderCount, 2)
-      })
-
-      it("should render component returning null", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const NullComponent = () => null
-
-        brint.render([NullComponent], container)
-
-        assert.equal(container.childNodes.length, 0)
-      })
-
-      it("should render component returning fragment", () => {
-        const domain = new ChangeDomain()
-        const brint = create({ changeDomain: domain })
-
-        const FragmentComponent = () => [null, ["span", {}, "a"], ["span", {}, "b"]]
-
-        brint.render([FragmentComponent], container)
-
-        assert.equal(container.childNodes.length, 2)
-        assert.equal((container.childNodes[0] as Element).textContent, "a")
-        assert.equal((container.childNodes[1] as Element).textContent, "b")
-      })
-    })
-
     describe("ListRenderSpec", () => {
       let container: HTMLElement
 
@@ -2178,21 +2003,22 @@ describe("brint", () => {
           assert.equal(p.textContent, "updated")
         })
 
-        it("should handle component returning different structures", () => {
+        it("should handle function returning different structures", () => {
           const domain = new ChangeDomain()
           const brint = create({ changeDomain: domain })
 
           const state = domain.enableChanges({ mode: "simple" })
 
-          const MyComponent = (props: { mode: string }) => {
-            if (props.mode === "simple") {
-              return ["div", {}, "simple mode"]
-            }
-            // Use array wrapper for multiple children
-            return ["div", {}, [["span", {}, "complex"], ["span", {}, "mode"]]]
-          }
-
-          brint.render([MyComponent, { mode: () => state.mode }], container)
+          brint.render(
+            () => {
+              if (state.mode === "simple") {
+                return ["div", {}, "simple mode"]
+              }
+              // Use array wrapper for multiple children
+              return ["div", {}, [["span", {}, "complex"], ["span", {}, "mode"]]]
+            },
+            container,
+          )
 
           assert.equal(container.textContent, "simple mode")
 
@@ -2295,13 +2121,11 @@ describe("brint", () => {
 
           const callOrder: string[] = []
 
-          const ChildComponent = () => {
-            return (ctx) => {
-              ctx.onMount(() => {
-                callOrder.push("child")
-              })
-              return ["span", {}, "child"]
-            }
+          const childFn = (ctx) => {
+            ctx.onMount(() => {
+              callOrder.push("child")
+            })
+            return ["span", {}, "child"]
           }
 
           brint.render(
@@ -2309,7 +2133,7 @@ describe("brint", () => {
               ctx.onMount(() => {
                 callOrder.push("parent")
               })
-              return [null, [ChildComponent]]
+              return [null, childFn]
             },
             container,
           )
@@ -2349,15 +2173,13 @@ describe("brint", () => {
 
           const cleanupOrder: string[] = []
 
-          const ChildComponent = () => {
-            return (ctx) => {
-              ctx.onMount(() => {
-                return () => {
-                  cleanupOrder.push("child")
-                }
-              })
-              return ["span", {}, "child"]
-            }
+          const childFn = (ctx) => {
+            ctx.onMount(() => {
+              return () => {
+                cleanupOrder.push("child")
+              }
+            })
+            return ["span", {}, "child"]
           }
 
           const handle = brint.render(
@@ -2367,7 +2189,7 @@ describe("brint", () => {
                   cleanupOrder.push("parent")
                 }
               })
-              return [null, [ChildComponent]]
+              return [null, childFn]
             },
             container,
           )

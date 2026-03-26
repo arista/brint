@@ -39,13 +39,6 @@ export interface RenderNodeProperty {
 }
 
 /**
- * Stores a reactive component prop with its CachedFunction
- */
-export interface RenderNodeComponentProp {
-  cachedFunction: CachedFunction<unknown>
-}
-
-/**
  * Stores an event listener with its handler and options for cleanup
  */
 export interface RenderNodeEventListener {
@@ -93,12 +86,6 @@ export class RenderNode {
 
   /** CachedFunction for FunctionRenderSpec nodes */
   functionCachedFunction: CachedFunction<unknown> | null = null
-
-  /** Reactive component props (only populated for ComponentRenderSpec with reactive props) */
-  componentProps: Map<string, RenderNodeComponentProp> | null = null
-
-  /** CachedFunction for ComponentRenderSpec nodes (resolves props and calls component) */
-  componentCachedFunction: CachedFunction<unknown> | null = null
 
   /** CachedFunction for ListRenderSpec items (wraps items source function) */
   listItemsCachedFunction: CachedFunction<unknown> | null = null
@@ -258,18 +245,6 @@ export class RenderNode {
     if (this.functionCachedFunction) {
       this.functionCachedFunction.remove()
       this.functionCachedFunction = null
-    }
-
-    // Clean up component CachedFunctions
-    if (this.componentProps) {
-      for (const prop of this.componentProps.values()) {
-        prop.cachedFunction.remove()
-      }
-      this.componentProps = null
-    }
-    if (this.componentCachedFunction) {
-      this.componentCachedFunction.remove()
-      this.componentCachedFunction = null
     }
 
     // Clean up list CachedFunction and subscription
