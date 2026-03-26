@@ -130,7 +130,7 @@ h.ul(() => state.items.map(item => h.li(item)))
 
 Brint uses [chchchchanges](https://github.com/anthropics/chchchchanges) for change detection. Any data accessed inside a reactive function is automatically tracked.
 
-Note: Components have their own reactivity behavior—see [Component Reactivity](#component-reactivity) for details on how components re-render and how to control update granularity.
+Note: Components have their own reactivity behavior—see [Component Reactivity](#component-reactivity) for important pitfalls to avoid.
 
 ## Fragments
 
@@ -236,36 +236,61 @@ const Greeting = (props) => {
 [Greeting, { user: state.user }]
 ```
 
-**Function-wrapping controls update granularity:**
+#### Pitfall 1: Passing extracted values as props
+
+When you extract a primitive value and pass it as a prop, the value is captured at that moment and loses reactivity:
 
 ```typescript
-const Example = (props) => {
-  return h.div([
-    // Without function: entire component re-runs when count changes
-    h.span(`Count: ${props.state.count}`),
+// BROKEN: state.count is evaluated immediately, component receives static value
+[Counter, { value: state.count }]  // just passes 42, won't update
 
-    // With function: only this text node updates when count changes
-    h.span(() => `Count: ${props.state.count}`),
+// WORKS: function is evaluated inside change-detection
+[Counter, { value: () => state.count }]
+
+// WORKS: object is passed, property access happens inside component
+[Counter, { state: state }]  // component accesses state.count
+```
+
+**Rule of thumb:** Pass objects, not extracted primitive values. If you must pass a primitive, wrap it in a function.
+
+This pitfall is usually obvious—your UI won't update when you expect it to.
+
+#### Pitfall 2: Components re-rendering too broadly
+
+This pitfall is subtler. When you access reactive data directly in a component (without wrapping in a function), changes cause the *entire component* to re-run:
+
+```typescript
+const Dashboard = (props) => {
+  const { state } = props
+  return h.div([
+    h.header("Dashboard"),
+    h.nav(/* ... expensive nav ... */),
+    h.main([
+      // Accessing state.tickCount here makes the ENTIRE Dashboard
+      // re-render on every tick, including header and nav
+      h.span(`Ticks: ${state.tickCount}`)
+    ])
   ])
 }
 ```
 
-Both approaches result in the UI updating, but function-wrapping is more efficient for frequently-changing values since it avoids re-running the component.
-
-**Prop passing matters too:**
+The UI updates correctly, but you're doing more work than necessary. For frequently-changing values, wrap in a function to limit the update scope:
 
 ```typescript
-// Reactive: function is evaluated inside change-detection
-[Counter, { value: () => state.count }]
-
-// Reactive: object is passed, property access happens inside component
-[Counter, { state: state }]  // component accesses state.count
-
-// NOT reactive: value is captured at spec-creation time
-[Counter, { value: state.count }]  // just passes the number 42
+const Dashboard = (props) => {
+  const { state } = props
+  return h.div([
+    h.header("Dashboard"),
+    h.nav(/* ... expensive nav ... */),
+    h.main([
+      // Only this text node updates on each tick
+      h.span(() => `Ticks: ${state.tickCount}`)
+    ])
+  ])
+}
 ```
 
-When you pass a primitive value directly (like `state.count`), it's evaluated immediately and the component receives a static value. Wrap in a function or pass the parent object to maintain reactivity.
+**Rule of thumb:** For values that change frequently (timers, animations, rapid user input), wrap the access in a function to avoid re-running the entire component.
 
 ## SVG
 
