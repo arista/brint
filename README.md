@@ -189,6 +189,19 @@ const Button = (props) => {
 }]
 ```
 
+For type-safe props, use the `component()` helper:
+
+```typescript
+import { component } from 'brint'
+
+// Props are type-checked against Button's parameter type
+component(Button, {
+  variant: "primary",
+  label: "Submit",
+  on: { click: () => handleSubmit() }
+})
+```
+
 ### Reactive Props
 
 Function props are automatically reactive:
@@ -395,6 +408,16 @@ list(todos, (todo) => h.li(todo.text))
 
 // Reactive items
 list(() => state.todos, (todo) => h.li(todo.text))
+```
+
+### `component(fn, props)`
+
+Creates a type-safe component render spec. Use this instead of `[Component, props]` when you want TypeScript to check your props.
+
+```typescript
+import { component } from 'brint'
+
+component(MyComponent, { title: "Hello" })  // Props are type-checked
 ```
 
 ### `brint/elements`
