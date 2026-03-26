@@ -130,6 +130,8 @@ h.ul(() => state.items.map(item => h.li(item)))
 
 Brint uses [chchchchanges](https://github.com/anthropics/chchchchanges) for change detection. Any data accessed inside a reactive function is automatically tracked.
 
+Note: Components have their own reactivity behavior—see [Component Reactivity](#component-reactivity) for details on how components re-render and how to control update granularity.
+
 ## Fragments
 
 Group multiple elements without a wrapper using `fragment()`:
@@ -219,6 +221,51 @@ const Counter = (props, ctx) => {
   ])
 }
 ```
+
+### Component Reactivity
+
+Components are inherently reactive. The entire component function runs inside a change-detection context, so any change-enabled data accessed during execution becomes a dependency. When that data changes, the component re-renders.
+
+```typescript
+const Greeting = (props) => {
+  // Accessing props.user.name here tracks it as a dependency
+  return h.div(`Hello, ${props.user.name}!`)
+}
+
+// If user is change-enabled, changing user.name will re-render Greeting
+[Greeting, { user: state.user }]
+```
+
+**Function-wrapping controls update granularity:**
+
+```typescript
+const Example = (props) => {
+  return h.div([
+    // Without function: entire component re-runs when count changes
+    h.span(`Count: ${props.state.count}`),
+
+    // With function: only this text node updates when count changes
+    h.span(() => `Count: ${props.state.count}`),
+  ])
+}
+```
+
+Both approaches result in the UI updating, but function-wrapping is more efficient for frequently-changing values since it avoids re-running the component.
+
+**Prop passing matters too:**
+
+```typescript
+// Reactive: function is evaluated inside change-detection
+[Counter, { value: () => state.count }]
+
+// Reactive: object is passed, property access happens inside component
+[Counter, { state: state }]  // component accesses state.count
+
+// NOT reactive: value is captured at spec-creation time
+[Counter, { value: state.count }]  // just passes the number 42
+```
+
+When you pass a primitive value directly (like `state.count`), it's evaluated immediately and the component receives a static value. Wrap in a function or pass the parent object to maintain reactivity.
 
 ## SVG
 
