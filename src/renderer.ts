@@ -1390,6 +1390,19 @@ function setupListSpec(
         break
       }
 
+      case "ArrayMove": {
+        // Relocate the existing child (and its DOM subtree) rather than
+        // destroying and rebuilding it — preserving its node identity and any
+        // internal state. `to` is the post-removal index (splice semantics),
+        // which is exactly what moveChildToIndex expects.
+        const { from, to } = change
+        const child = renderNode.children[from]
+        if (child) {
+          moveChildToIndex(renderNode, child, to, actualParentDomNode)
+        }
+        break
+      }
+
       case "ObjectSet": {
         // Check if this is setting a numeric index
         const index = typeof change.prop === "number" ? change.prop : parseInt(String(change.prop), 10)

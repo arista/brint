@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import { Window } from "happy-dom"
 import { create, List, RenderNode } from "../src/index.js"
-import { ChangeDomain } from "chchchchanges"
+import { ChangeDomain, getProxyState } from "chchchchanges"
 
 // Set up DOM environment
 let window: Window
@@ -2271,6 +2271,54 @@ describe("brint", () => {
           assert.equal(container.textContent, "State: 20")
         })
       })
+    })
+  })
+
+  describe("List ArrayMove", () => {
+    let container: Element
+
+    beforeEach(() => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+    })
+
+    it("relocates the existing DOM node instead of rebuilding it", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const source = domain.enableChanges([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }])
+      const mapped = domain.createMappedArray(source, (i: { id: number }) => ({ id: i.id }))
+      brint.render(
+        [
+          List,
+          {
+            items: mapped,
+            each: (m: { id: number }) => ["div", { class: "item", "data-id": String(m.id) }],
+          },
+        ],
+        container,
+      )
+
+      const order = () =>
+        [...container.querySelectorAll(".item")].map((n) => n.getAttribute("data-id"))
+      const nodeOf = (id: string) =>
+        [...container.querySelectorAll(".item")].find((n) => n.getAttribute("data-id") === id) as
+          | (Element & { __tag?: string })
+          | undefined
+
+      assert.deepEqual(order(), ["1", "2", "3", "4"])
+      nodeOf("1")!.__tag = "N1"
+      nodeOf("3")!.__tag = "N3"
+
+      // Announce a move of id:1 from index 0 to index 2 (post-removal), owner-style:
+      // update the backing directly, then emit a single ArrayMove.
+      const target = (getProxyState(source) as unknown as { target: { id: number }[] }).target
+      const [x] = target.splice(0, 1)
+      target.splice(2, 0, x)
+      domain.emitArrayChangeOnBehalfOf(source, { type: "ArrayMove", from: 0, to: 2 })
+
+      assert.deepEqual(order(), ["2", "3", "1", "4"])
+      assert.equal(nodeOf("1")!.__tag, "N1") // moved node preserved, not rebuilt
+      assert.equal(nodeOf("3")!.__tag, "N3") // untouched node preserved
     })
   })
 })
