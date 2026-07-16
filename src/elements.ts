@@ -35,7 +35,11 @@ function isElementArgs(value: unknown): value is ElementArgs {
  */
 export function el(
   tag: string,
-  argsOrChildren?: ElementArgs | Children,
+  // Use the same permissive args type as the named element helpers (h.div, ...)
+  // so `on`, `style`, `properties`, and arbitrary attributes all typecheck. The
+  // stricter `ElementArgs` intersects with Record<string, ElementValue>, which
+  // (wrongly) rejects object-valued keys like `on`.
+  argsOrChildren?: BaseElementArgs | Children,
   children?: Children
 ): ElementRenderSpec {
   if (argsOrChildren === undefined) {
@@ -47,8 +51,9 @@ export function el(
   if (isElementArgs(argsOrChildren)) {
     return [tag, argsOrChildren]
   }
-  // Children without args - include empty args object
-  return [tag, {}, argsOrChildren]
+  // Children without args - include empty args object. (isElementArgs was false
+  // above, so this is children, not a BaseElementArgs.)
+  return [tag, {}, argsOrChildren as Children]
 }
 
 // ============================================================================
