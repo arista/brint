@@ -14,6 +14,11 @@ export { RenderNode }
  */
 export const List = Symbol("List")
 
+/**
+ * Symbol used to identify ManageRenderSpecs
+ */
+export const Manage = Symbol("Manage")
+
 // ============================================================================
 // RenderSpec Types
 // ============================================================================
@@ -25,6 +30,7 @@ export type RenderSpec =
   | FunctionRenderSpec
   | FragmentRenderSpec
   | ListRenderSpec<any>
+  | ManageRenderSpec
 
 export type NullRenderSpec = null | undefined
 
@@ -93,6 +99,22 @@ export type FragmentRenderSpec = [null, ...RenderSpec[]]
 
 export type ListRenderSpec<T = unknown> = [typeof List, ListItemsSpec<T>]
 
+/**
+ * A spec that applies args (and optionally children) to an EXISTING element
+ * rather than creating a new one. See `manage()`.
+ */
+export type ManageRenderSpec = [typeof Manage, ManageSpec]
+
+export type ManageSpec = {
+  element: Element
+  args: ElementArgs
+  /**
+   * If omitted, the element's existing children are left untouched. If provided,
+   * brint takes ownership of the element's children (clearing existing ones).
+   */
+  children?: ElementChildRenderSpecs
+}
+
 export type ListItemsSpec<T> = {
   items: ListSource<T>
   each: ListItemFn<T>
@@ -146,6 +168,7 @@ export interface BrintConfig {
 export interface Brint {
   render(spec: RenderSpec, element: Element): RenderHandle
   List: typeof List
+  Manage: typeof Manage
 }
 
 export interface RenderHandle {
@@ -174,6 +197,7 @@ export function create(config: BrintConfig): Brint {
       }
     },
     List,
+    Manage,
   }
 }
 
@@ -211,6 +235,39 @@ export function fragment(...children: RenderSpec[]): FragmentRenderSpec {
  */
 export function list<T>(items: ListSource<T>, each: ListItemFn<T>): ListRenderSpec<T> {
   return [List, { items, each }]
+}
+
+/**
+ * Manage an EXISTING element instead of creating a new one — useful for elements
+ * outside the mount root, like `<html>`, `<body>`, or `<title>`.
+ *
+ * Applies `args` (attributes, styles, properties, event listeners) the same way
+ * element specs do, but **non-destructively**: only what you pass is set; nothing
+ * else on the element is cleared. Reactive values work as usual.
+ *
+ * Children are optional:
+ *  - **omitted** — the element's existing children are left completely alone.
+ *  - **provided** — brint takes ownership of the element's children (clearing any
+ *    existing ones), then renders and reactively maintains yours.
+ *
+ * The element itself is never created, inserted, moved, or removed by brint.
+ *
+ * @example
+ * // Reactively set the theme classes on <html>, leaving its children alone
+ * manage(document.documentElement, { class: () => themeClasses() })
+ *
+ * @example
+ * // Set the document title text
+ * manage(document.querySelector("title")!, {}, () => state.pageTitle)
+ */
+export function manage(
+  element: Element,
+  args: ElementArgs,
+  children?: ElementChildRenderSpecs,
+): ManageRenderSpec {
+  return children === undefined
+    ? [Manage, { element, args }]
+    : [Manage, { element, args, children }]
 }
 
 /**

@@ -9,8 +9,9 @@ import type {
   RenderContext,
   ListRenderSpec,
   ListItemsSpec,
+  ManageRenderSpec,
 } from "./index.js"
-import { List } from "./index.js"
+import { List, Manage } from "./index.js"
 import {
   RenderNode,
   type ReactiveElementValue,
@@ -79,6 +80,13 @@ function isFunctionRenderSpec(spec: RenderSpec): spec is FunctionRenderSpec {
  */
 function isListRenderSpec(spec: RenderSpec): spec is ListRenderSpec {
   return Array.isArray(spec) && spec[0] === List
+}
+
+/**
+ * Check if a value is a ManageRenderSpec
+ */
+function isManageRenderSpec(spec: RenderSpec): spec is ManageRenderSpec {
+  return Array.isArray(spec) && spec[0] === Manage
 }
 
 /**
@@ -486,11 +494,7 @@ function removeEventListeners(element: Element, renderNode: RenderNode): void {
 /**
  * Apply a single property to an element
  */
-function applyPropertyValue(
-  element: Element,
-  key: string | symbol,
-  value: unknown,
-): void {
+function applyPropertyValue(element: Element, key: string | symbol, value: unknown): void {
   ;(element as unknown as Record<string | symbol, unknown>)[key] = value
 }
 
@@ -579,6 +583,56 @@ function applyProperties(
  * @param xmlns The inherited XML namespace
  * @param domain The ChangeDomain for reactive values
  */
+/**
+ * Apply an element's args (attributes, styles, event listeners, properties) to a
+ * DOM element. Shared by the element-creation and element-managing paths — only
+ * sets what's specified, never clears anything.
+ */
+function applyElementArgs(
+  element: Element,
+  args: ElementArgs,
+  domain: ChangeDomain,
+  renderNode: RenderNode,
+): void {
+  applyAttributes(element, args, domain, renderNode)
+
+  if (args.style) {
+    applyStyles(element, args.style, domain, renderNode)
+  }
+
+  if (args.on) {
+    applyEventListeners(element, args.on, renderNode)
+  }
+
+  if (args.properties) {
+    applyProperties(element, args.properties, domain, renderNode)
+  }
+}
+
+/**
+ * Render an element's child specs as children of `element`, attached under
+ * `renderNode`. Shared by the element-creation and element-managing paths.
+ */
+function renderElementChildren(
+  renderNode: RenderNode,
+  element: Element,
+  children: ElementChildRenderSpecs,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): void {
+  const childSpecs: RenderSpec[] = isRenderSpecArray(children) ? children : [children]
+  for (const childSpec of childSpecs) {
+    render(childSpec, renderNode, element, xmlns, domain)
+  }
+}
+
+/**
+ * The namespace to use for a managed element's children (null for HTML).
+ */
+function managedChildXmlns(element: Element): string | null {
+  return element.namespaceURI === "http://www.w3.org/1999/xhtml" ? null : element.namespaceURI
+}
+
 export function render(
   spec: RenderSpec,
   parentNode: RenderNode | null,
@@ -629,8 +683,7 @@ export function render(
     } else {
       try {
         element = document.createElement(tagName)
-      } 
-      catch(e) {
+      } catch (e) {
         throw e
       }
     }
@@ -639,19 +692,7 @@ export function render(
 
     // Apply attributes, styles, event listeners, and properties
     if (args) {
-      applyAttributes(element, args, domain, renderNode)
-
-      if (args.style) {
-        applyStyles(element, args.style, domain, renderNode)
-      }
-
-      if (args.on) {
-        applyEventListeners(element, args.on, renderNode)
-      }
-
-      if (args.properties) {
-        applyProperties(element, args.properties, domain, renderNode)
-      }
+      applyElementArgs(element, args, domain, renderNode)
     }
 
     // Insert into DOM
@@ -661,10 +702,29 @@ export function render(
 
     // Render children
     if (children !== null) {
-      const childSpecs: RenderSpec[] = isRenderSpecArray(children) ? children : [children]
-      for (const childSpec of childSpecs) {
-        render(childSpec, renderNode, element, elementXmlns, domain)
-      }
+      renderElementChildren(renderNode, element, children, elementXmlns, domain)
+    }
+
+    return renderNode
+  }
+
+  if (isManageRenderSpec(spec)) {
+    // ManageRenderSpec: apply args (and optionally children) to an EXISTING
+    // element that brint never creates, inserts, moves, or removes. The node is
+    // a portal — `node` stays null so it contributes nothing to the outer DOM
+    // flow; the managed element is tracked separately and its children live
+    // inside it. Uses the SAME apply/children mechanism as element creation.
+    const { element, args, children } = spec[1]
+    renderNode.managedElement = element
+
+    if (args) {
+      applyElementArgs(element, args, domain, renderNode)
+    }
+
+    if (children !== undefined) {
+      // Children provided: brint takes ownership — clear existing, render ours.
+      element.replaceChildren()
+      renderElementChildren(renderNode, element, children, managedChildXmlns(element), domain)
     }
 
     return renderNode
@@ -786,7 +846,12 @@ function cleanupRenderNode(renderNode: RenderNode): void {
  * Move a RenderNode from its current position to a new index within the same parent.
  * Assumes the node is already a child of the parent.
  */
-function moveChildToIndex(parent: RenderNode, child: RenderNode, newIndex: number, parentDomNode: Node | null): void {
+function moveChildToIndex(
+  parent: RenderNode,
+  child: RenderNode,
+  newIndex: number,
+  parentDomNode: Node | null,
+): void {
   const currentIndex = parent.children.indexOf(child)
   if (currentIndex === -1 || currentIndex === newIndex) return
 
@@ -929,6 +994,11 @@ function canReconcile(spec: RenderSpec, existingNode: RenderNode): boolean {
     return true
   }
 
+  // Managed specs reconcile only when targeting the same element.
+  if (isManageRenderSpec(spec) && isManageRenderSpec(existingSpec)) {
+    return spec[1].element === existingSpec[1].element
+  }
+
   return false
 }
 
@@ -988,6 +1058,12 @@ function reconcile(
     return
   }
 
+  if (isManageRenderSpec(spec)) {
+    // ManageRenderSpec: re-apply args/children to the same managed element.
+    reconcileManage(spec, existingNode, domain)
+    return
+  }
+
   // Unknown type: full replacement
   const parent = existingNode.parent
   if (parent) {
@@ -1039,6 +1115,35 @@ function reconcileChildren(
 
   // Clean up leftover children
   cleanupLeftoverChildren(parentNode, childSpecs.length)
+}
+
+/**
+ * Reconcile a ManageRenderSpec with an existing managed RenderNode (same
+ * element). Non-destructive: re-applies the specified args (never removing
+ * others), and reconciles children only if the new spec provides them.
+ */
+function reconcileManage(
+  spec: ManageRenderSpec,
+  existingNode: RenderNode,
+  domain: ChangeDomain,
+): void {
+  const { element, args, children } = spec[1]
+
+  // Drop the reactive bindings and listeners we previously added, then re-apply
+  // the current args. We do NOT remove attributes/styles absent from the new
+  // args — managing is non-destructive.
+  clearReactiveState(existingNode)
+  removeEventListeners(element, existingNode)
+  if (args) {
+    applyElementArgs(element, args, domain, existingNode)
+  }
+
+  // Reconcile children only if provided; if omitted, leave the element's
+  // children (including anything brint managed earlier) untouched.
+  if (children !== undefined) {
+    const childSpecs: RenderSpec[] = isRenderSpecArray(children) ? children : [children]
+    reconcileChildren(childSpecs, existingNode, element, managedChildXmlns(element), domain)
+  }
 }
 
 /**
@@ -1405,7 +1510,8 @@ function setupListSpec(
 
       case "ObjectSet": {
         // Check if this is setting a numeric index
-        const index = typeof change.prop === "number" ? change.prop : parseInt(String(change.prop), 10)
+        const index =
+          typeof change.prop === "number" ? change.prop : parseInt(String(change.prop), 10)
         if (!isNaN(index) && index >= 0 && index < renderNode.children.length) {
           // Replace the child at this index
           const oldChild = renderNode.removeChildAt(index)

@@ -57,6 +57,15 @@ export class RenderNode {
   /** The underlying DOM Node (if any) */
   node: Node | null = null
 
+  /**
+   * For a managed node (see `manage()`): the pre-existing element this node
+   * applies args/children to. Unlike `node`, this element is NEVER created,
+   * inserted, moved, or removed by brint — the node is a "portal" that
+   * contributes nothing to the outer DOM flow, and its children live inside
+   * `managedElement`.
+   */
+  managedElement: Element | null = null
+
   /** The xmlns namespace inherited or specified for this node */
   xmlns: string | null = null
 
@@ -239,7 +248,16 @@ export class RenderNode {
     this.reactiveAttributes = null
     this.reactiveStyles = null
     this.reactiveProperties = null
+    // For a managed element (which persists), explicitly detach listeners we
+    // added. (Non-managed elements are removed from the DOM above, so their
+    // listeners go away with them.)
+    if (this.managedElement && this.eventListeners) {
+      for (const [eventName, { handler, options }] of this.eventListeners) {
+        this.managedElement.removeEventListener(eventName, handler, options)
+      }
+    }
     this.eventListeners = null
+    this.managedElement = null
 
     // Clean up function CachedFunction
     if (this.functionCachedFunction) {
@@ -289,8 +307,9 @@ export class RenderNode {
     }
 
     // Nothing at this level - check parent's previous siblings
-    // (but only if parent has no DOM node, i.e., is a fragment/function/etc.)
-    if (this.parent && !this.parent.node) {
+    // (but only if parent has no DOM node, i.e., is a fragment/function/etc.).
+    // A managed parent is a DOM boundary: don't cross out of managedElement.
+    if (this.parent && !this.parent.node && !this.parent.managedElement) {
       return this.parent.findPreviousDomNode()
     }
 
@@ -304,6 +323,12 @@ export class RenderNode {
     // If we have a DOM node, return it
     if (this.node) {
       return this.node
+    }
+
+    // A managed node is a portal: its children live inside `managedElement`
+    // (elsewhere in the document), so it contributes nothing to the outer flow.
+    if (this.managedElement) {
+      return null
     }
 
     // Otherwise, look at children from the end
@@ -323,6 +348,11 @@ export class RenderNode {
   getFirstDomNode(): Node | null {
     if (this.node) {
       return this.node
+    }
+
+    // Managed portal: contributes nothing to the outer flow (see getLastDomNode).
+    if (this.managedElement) {
+      return null
     }
 
     for (const child of this.children) {

@@ -5,9 +5,9 @@ A lightweight, reactive HTML rendering library for TypeScript. Brint uses plain 
 ## Quick Example
 
 ```typescript
-import { create } from 'brint'
-import * as h from 'brint/elements'
-import { ChangeDomain } from 'chchchchanges'
+import { create } from "brint"
+import * as h from "brint/elements"
+import { ChangeDomain } from "chchchchanges"
 
 const domain = new ChangeDomain()
 const brint = create({ changeDomain: domain })
@@ -20,9 +20,9 @@ brint.render(
   h.div([
     h.h1("Counter"),
     h.p(() => `Count: ${state.count}`),
-    h.button({ on: { click: () => state.count++ } }, "Increment")
+    h.button({ on: { click: () => state.count++ } }, "Increment"),
   ]),
-  document.getElementById("app")
+  document.getElementById("app"),
 )
 ```
 
@@ -33,7 +33,7 @@ When `state.count` changes, only the `<p>` element updates automatically.
 Import element helpers from `brint/elements`:
 
 ```typescript
-import * as h from 'brint/elements'
+import * as h from "brint/elements"
 
 // Simple element
 h.div()
@@ -45,13 +45,11 @@ h.div("Hello")
 h.div({ id: "main", class: "container" })
 
 // With attributes and children
-h.div({ class: "card" }, [
-  h.h2("Title"),
-  h.p("Content")
-])
+h.div({ class: "card" }, [h.h2("Title"), h.p("Content")])
 ```
 
 Elements can be called four ways:
+
 - `h.div()` - empty element
 - `h.div("child")` or `h.div([child1, child2])` - with children
 - `h.div({ class: "foo" })` - with attributes
@@ -63,8 +61,8 @@ Elements can be called four ways:
 h.input({
   type: "text",
   placeholder: "Enter name",
-  disabled: false,           // false = attribute not set
-  required: true,            // true = attribute set
+  disabled: false, // false = attribute not set
+  required: true, // true = attribute set
   class: ["btn", "primary"], // Arrays joined with spaces
 })
 ```
@@ -76,23 +74,26 @@ h.div({
   style: {
     color: "red",
     fontSize: "16px",
-    display: () => state.visible ? "block" : "none"
-  }
+    display: () => (state.visible ? "block" : "none"),
+  },
 })
 ```
 
 ### Event Listeners
 
 ```typescript
-h.button({
-  on: {
-    click: (e) => console.log("Clicked!", e),
-    mouseenter: {
-      listener: handleHover,
-      options: { once: true }
-    }
-  }
-}, "Click me")
+h.button(
+  {
+    on: {
+      click: (e) => console.log("Clicked!", e),
+      mouseenter: {
+        listener: handleHover,
+        options: { once: true },
+      },
+    },
+  },
+  "Click me",
+)
 ```
 
 ### DOM Properties
@@ -102,11 +103,11 @@ For properties that can't be set via attributes:
 ```typescript
 h.input({
   properties: {
-    value: () => state.inputValue
+    value: () => state.inputValue,
   },
   on: {
-    input: (e) => state.inputValue = e.target.value
-  }
+    input: (e) => (state.inputValue = e.target.value),
+  },
 })
 ```
 
@@ -137,14 +138,10 @@ Note: Components have their own reactivity behavior—see [Component Reactivity]
 Group multiple elements without a wrapper using `fragment()`:
 
 ```typescript
-import { fragment } from 'brint'
-import * as h from 'brint/elements'
+import { fragment } from "brint"
+import * as h from "brint/elements"
 
-fragment(
-  h.header("Top"),
-  h.main("Middle"),
-  h.footer("Bottom")
-)
+fragment(h.header("Top"), h.main("Middle"), h.footer("Bottom"))
 ```
 
 ## Lists
@@ -152,14 +149,14 @@ fragment(
 Render arrays efficiently with `list()`:
 
 ```typescript
-import { list } from 'brint'
-import * as h from 'brint/elements'
+import { list } from "brint"
+import * as h from "brint/elements"
 
 h.ul([
   list(
     () => state.todos,
-    (todo) => h.li({ class: todo.done ? "done" : "" }, todo.text)
-  )
+    (todo) => h.li({ class: todo.done ? "done" : "" }, todo.text),
+  ),
 ])
 ```
 
@@ -167,38 +164,66 @@ List updates are surgical - adding/removing items doesn't re-render siblings.
 
 The first argument can be a static array or a function returning an array (for reactivity).
 
+## Managing Existing Elements
+
+Sometimes you need to control an element that already exists and lives outside your mount root — like `<html>`, `<body>`, or `<title>`. `manage()` applies args (and optionally children) to an existing element instead of creating a new one:
+
+```typescript
+import { manage, fragment } from "brint"
+
+fragment(
+  // Reactively set theme classes on <html> — its children (head/body) are untouched
+  manage(document.documentElement, { class: () => themeClasses() }),
+
+  // Set the document <title> text
+  manage(document.querySelector("title")!, {}, () => state.pageTitle),
+
+  // ...the rest of your app
+)
+```
+
+`manage()` runs the same attribute / style / property / event-listener and children machinery as normal element specs — with two key differences:
+
+- **Non-destructive.** Only what you pass is applied. It never clears attributes, styles, or properties the element already had (or that something else set).
+- **Children are opt-in.** Omit `children` and the element's existing children are left completely alone. Provide `children` and brint takes ownership of the element's child list (clearing any existing children), then renders and reactively maintains yours.
+
+The element itself is never created, inserted, moved, or removed by brint. On unmount, brint tears down its reactive bindings, event listeners, and any children it rendered, but leaves the element in place (with the last-applied values — they are not reverted).
+
 ## Components
 
 Components are functions that receive props and optionally a RenderContext:
 
 ```typescript
-import * as h from 'brint/elements'
+import * as h from "brint/elements"
 
 const Button = (props) => {
-  return h.button({
-    class: props.variant,
-    on: props.on
-  }, props.label)
+  return h.button(
+    {
+      class: props.variant,
+      on: props.on,
+    },
+    props.label,
+  )
 }
 
 // Just call the component function
 Button({
   variant: "primary",
   label: "Submit",
-  on: { click: () => handleSubmit() }
+  on: { click: () => handleSubmit() },
 })
 ```
 
 For type-safe props and access to RenderContext, use the `component()` helper:
 
 ```typescript
-import { component } from 'brint'
+import { component } from "brint"
 
 // Props are type-checked, component receives RenderContext
 component(Button, {
   variant: "primary",
   label: "Submit",
-  on: { click: () => handleSubmit() }
+  on: { click: () => handleSubmit() },
 })
 ```
 
@@ -219,7 +244,7 @@ const Counter = (props, ctx) => {
 
   return h.div([
     h.span(() => `Count: ${ctx.state.count}`),
-    h.button({ on: { click: () => ctx.state.count++ } }, "+")
+    h.button({ on: { click: () => ctx.state.count++ } }, "+"),
   ])
 }
 ```
@@ -244,10 +269,10 @@ When you extract a primitive value and pass it as a prop, the value is captured 
 
 ```typescript
 // BROKEN: state.count is evaluated immediately, component receives static value
-component(Counter, { value: state.count })  // just passes 42, won't update
+component(Counter, { value: state.count }) // just passes 42, won't update
 
 // WORKS: object is passed, property access happens inside component
-component(Counter, { state: state })  // component accesses state.count
+component(Counter, { state: state }) // component accesses state.count
 ```
 
 **Rule of thumb:** Pass objects, not extracted primitive values.
@@ -256,7 +281,7 @@ This pitfall is usually obvious—your UI won't update when you expect it to.
 
 #### Pitfall 2: Components re-rendering too broadly
 
-This pitfall is subtler. When you access reactive data directly in a component (without wrapping in a function), changes cause the *entire component* to re-run:
+This pitfall is subtler. When you access reactive data directly in a component (without wrapping in a function), changes cause the _entire component_ to re-run:
 
 ```typescript
 const Dashboard = (props) => {
@@ -267,8 +292,8 @@ const Dashboard = (props) => {
     h.main([
       // Accessing state.tickCount here makes the ENTIRE Dashboard
       // re-render on every tick, including header and nav
-      h.span(`Ticks: ${state.tickCount}`)
-    ])
+      h.span(`Ticks: ${state.tickCount}`),
+    ]),
   ])
 }
 ```
@@ -283,8 +308,8 @@ const Dashboard = (props) => {
     h.nav(/* ... expensive nav ... */),
     h.main([
       // Only this text node updates on each tick
-      h.span(() => `Ticks: ${state.tickCount}`)
-    ])
+      h.span(() => `Ticks: ${state.tickCount}`),
+    ]),
   ])
 }
 ```
@@ -296,15 +321,15 @@ const Dashboard = (props) => {
 Import SVG elements from `brint/svg`. The `svg()` root element automatically sets the SVG namespace:
 
 ```typescript
-import { svg, circle, rect, path, g, text } from 'brint/svg'
+import { svg, circle, rect, path, g, text } from "brint/svg"
 
 svg({ width: 200, height: 200 }, [
   circle({ cx: 100, cy: 100, r: 50, fill: "blue" }),
   rect({ x: 10, y: 10, width: 30, height: 30, fill: "red" }),
   g({ transform: "translate(50, 50)" }, [
     path({ d: "M0 0 L20 20", stroke: "black" }),
-    text({ x: 0, y: 30 }, "Hello")
-  ])
+    text({ x: 0, y: 30 }, "Hello"),
+  ]),
 ])
 ```
 
@@ -353,11 +378,11 @@ You can use array syntax directly if you prefer, or mix it with helpers. When us
 Creates a Brint instance.
 
 ```typescript
-import { create } from 'brint'
-import { ChangeDomain } from 'chchchchanges'
+import { create } from "brint"
+import { ChangeDomain } from "chchchchanges"
 
 const brint = create({
-  changeDomain: new ChangeDomain()
+  changeDomain: new ChangeDomain(),
 })
 ```
 
@@ -377,7 +402,7 @@ handle.unmount()
 Creates a fragment (multiple siblings without a wrapper).
 
 ```typescript
-import { fragment } from 'brint'
+import { fragment } from "brint"
 
 fragment(child1, child2, child3)
 ```
@@ -387,14 +412,31 @@ fragment(child1, child2, child3)
 Creates a list with surgical updates.
 
 ```typescript
-import { list } from 'brint'
-import * as h from 'brint/elements'
+import { list } from "brint"
+import * as h from "brint/elements"
 
 // Static items
 list(todos, (todo) => h.li(todo.text))
 
 // Reactive items
-list(() => state.todos, (todo) => h.li(todo.text))
+list(
+  () => state.todos,
+  (todo) => h.li(todo.text),
+)
+```
+
+### `manage(element, args, children?)`
+
+Applies `args` (and optionally `children`) to an **existing** element rather than creating a new one. Non-destructive — see [Managing Existing Elements](#managing-existing-elements).
+
+```typescript
+import { manage } from "brint"
+
+// Attributes/styles only — leaves the element's children alone
+manage(document.documentElement, { class: () => themeClasses() })
+
+// With children — brint owns the element's child content
+manage(document.querySelector("title")!, {}, () => state.pageTitle)
 ```
 
 ### `component(fn, props)`
@@ -402,7 +444,7 @@ list(() => state.todos, (todo) => h.li(todo.text))
 Creates a type-safe component from a function and props. Returns a FunctionRenderSpec that passes props to your component function along with a RenderContext.
 
 ```typescript
-import { component } from 'brint'
+import { component } from "brint"
 
 // Type-safe props, component receives RenderContext for state and lifecycle
 component(MyComponent, { title: "Hello" })
@@ -413,13 +455,13 @@ component(MyComponent, { title: "Hello" })
 HTML element helpers. Each element is a function that accepts optional attributes and children.
 
 ```typescript
-import * as h from 'brint/elements'
+import * as h from "brint/elements"
 
 // Void elements (no children): h.br, h.hr, h.img, h.input, h.meta, h.link, ...
 // Normal elements: h.div, h.span, h.p, h.a, h.button, h.form, ...
 
 // Or import individually if preferred:
-import { div, span, a } from 'brint/elements'
+import { div, span, a } from "brint/elements"
 ```
 
 ### `brint/svg`
@@ -437,8 +479,8 @@ Available in FunctionRenderSpec (including components created with `component()`
 
 ```typescript
 interface RenderContext<T> {
-  state: T                    // Change-enabled state
-  onMount(callback): void     // Lifecycle hook
+  state: T // Change-enabled state
+  onMount(callback): void // Lifecycle hook
 }
 ```
 
