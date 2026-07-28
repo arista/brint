@@ -349,18 +349,28 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render(["div", { style: { color: "red", backgroundColor: "blue" } }], container)
+        brint.render(["div", { style: { color: "red", "background-color": "blue" } }], container)
 
         const div = container.firstChild as HTMLElement
         assert.equal(div.style.color, "red")
         assert.equal(div.style.backgroundColor, "blue")
       })
 
+      it("should apply CSS custom properties", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        brint.render(["div", { style: { "--show-duration": "500ms" } }], container)
+
+        const div = container.firstChild as HTMLElement
+        assert.equal(div.style.getPropertyValue("--show-duration"), "500ms")
+      })
+
       it("should handle numeric style values", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        brint.render(["div", { style: { opacity: 0.5, zIndex: 10 } }], container)
+        brint.render(["div", { style: { opacity: 0.5, "z-index": 10 } }], container)
 
         const div = container.firstChild as HTMLElement
         assert.equal(div.style.opacity, "0.5")
@@ -387,8 +397,8 @@ describe("brint", () => {
         const domain = new ChangeDomain()
         const brint = create({ changeDomain: domain })
 
-        // Use boxShadow as it accepts space-separated values
-        brint.render(["div", { style: { boxShadow: ["1px", "2px", "3px", "black"] } }], container)
+        // Use box-shadow as it accepts space-separated values
+        brint.render(["div", { style: { "box-shadow": ["1px", "2px", "3px", "black"] } }], container)
 
         const div = container.firstChild as HTMLElement
         assert.equal(div.style.boxShadow, "1px 2px 3px black")

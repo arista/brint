@@ -382,15 +382,16 @@ function applyStyleValue(
     // Remove the style property
     elementWithStyle.style.removeProperty(property)
   } else {
-    // Set the style property
-    // Note: camelCase properties need to use bracket notation
-    ;(elementWithStyle.style as unknown as Record<string, string>)[property] = rendered
+    // Set the style property. Property names are real (kebab-case) CSS names,
+    // e.g. "background-color" or the custom property "--show-duration".
+    elementWithStyle.style.setProperty(property, rendered)
   }
 }
 
 /**
  * Apply styles to a DOM element, supporting reactive values.
- * Style properties use camelCase (matching DOM API).
+ * Style property names are real (kebab-case) CSS names, e.g. "background-color"
+ * or custom properties like "--show-duration" (matching the setProperty API).
  */
 function applyStyles(
   element: Element,
