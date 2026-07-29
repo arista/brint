@@ -1771,6 +1771,48 @@ describe("brint", () => {
       })
 
       describe("element reconciliation", () => {
+        it("should preserve DOM order when reconciling children of different types", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+          const state = domain.enableChanges({ variant: "a" })
+
+          const tagsOf = () =>
+            Array.from(container.querySelector("div")!.children).map((c) => c.tagName.toLowerCase())
+
+          const handle = brint.render(
+            () =>
+              state.variant === "a"
+                ? [
+                    "div",
+                    {},
+                    [
+                      ["input", {}, "x"],
+                      ["button", {}, "y"],
+                    ],
+                  ]
+                : [
+                    "div",
+                    {},
+                    [
+                      ["section", {}, "x"],
+                      ["span", {}, "y"],
+                    ],
+                  ],
+            container,
+          )
+
+          assert.deepEqual(tagsOf(), ["input", "button"])
+
+          // Both children change type, so each hits the "can't reconcile, replace"
+          // path. Replacements must keep spec order, not jam at the front (which
+          // would yield ["span","section"]).
+          state.variant = "b"
+
+          assert.deepEqual(tagsOf(), ["section", "span"])
+
+          handle.unmount()
+        })
+
         it("should reuse element when tag and namespace match", () => {
           const domain = new ChangeDomain()
           const brint = create({ changeDomain: domain })

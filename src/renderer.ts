@@ -1123,8 +1123,14 @@ function reconcileChildren(
       existingChild.remove()
       // Render new child at this position
       const newChild = render(childSpec, null, parentDomNode, xmlns, domain)
-      // Insert at the correct position
+      // Insert at the correct position in the RenderNode tree
       parentNode.insertChildAt(i, newChild)
+      // render() inserted the DOM node while newChild was still unlinked, so it
+      // could not know its siblings and landed at the front of parentDomNode. Now
+      // that it's linked, move it into the position its siblings dictate.
+      if (parentDomNode) {
+        insertDomNodeForRenderNode(newChild, parentDomNode)
+      }
     } else {
       // No existing child - render new one
       render(childSpec, parentNode, parentDomNode, xmlns, domain)
