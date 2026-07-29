@@ -249,6 +249,31 @@ const Counter = (props, ctx) => {
 }
 ```
 
+### Element Lifecycle (`onMount`)
+
+Any element accepts an `onMount` arg — a lifecycle hook that runs once, after the element **and its children** are mounted, receiving the element's own DOM node. Unlike the component-level `ctx.onMount` (whose node is always `null`, since a component has no single node), the element hook always gives you a real `Node`:
+
+```typescript
+h.input({
+  // el is the real <input> element — no querySelector, no null check
+  onMount: (el) => (el as HTMLInputElement).focus(),
+})
+```
+
+Return a function to run cleanup when the element is removed (unmount) — ideal for wiring up things brint doesn't manage, like observers or third-party widgets:
+
+```typescript
+h.div({
+  onMount: (el) => {
+    const observer = new ResizeObserver(/* … */)
+    observer.observe(el)
+    return () => observer.disconnect() // runs on removal
+  },
+})
+```
+
+Timing mirrors `ctx.onMount`: callbacks fire bottom-up (a child's `onMount` before its parent's), and cleanups run when the element is removed by a conditional, list change, or `unmount()`. An element's `onMount` fires once when it's created; it does not re-fire on reconciliation.
+
 ### Component Reactivity
 
 When used with the `component()` helper, component functions run inside a change-detection context. Any change-enabled data accessed during execution becomes a dependency. When that data changes, the component re-renders.
@@ -484,7 +509,7 @@ interface RenderContext<T> {
 }
 ```
 
-The `onMount` callback receives the DOM node (or null for fragments/lists) and can return a cleanup function.
+The component-level `ctx.onMount` callback runs as a lifecycle hook and can return a cleanup function. Its `node` argument is **always `null`** — a component has no single DOM node of its own (it may render a fragment, a list, or nothing). To get an element's actual DOM node, use the element-level [`onMount`](#element-lifecycle-onmount) arg instead.
 
 ## Installation
 

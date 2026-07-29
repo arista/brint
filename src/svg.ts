@@ -194,7 +194,7 @@ export interface TextElementArgs extends BaseSvgElementArgs {
 /**
  * TSpan element attributes.
  */
-export interface TSpanElementArgs extends TextElementArgs {}
+export type TSpanElementArgs = TextElementArgs
 
 /**
  * TextPath element attributes.
@@ -212,12 +212,12 @@ export interface TextPathElementArgs extends BaseSvgElementArgs {
 /**
  * G (group) element attributes.
  */
-export interface GElementArgs extends BaseSvgElementArgs {}
+export type GElementArgs = BaseSvgElementArgs
 
 /**
  * Defs element attributes.
  */
-export interface DefsElementArgs extends BaseSvgElementArgs {}
+export type DefsElementArgs = BaseSvgElementArgs
 
 /**
  * Symbol element attributes.
@@ -399,7 +399,7 @@ export interface FeColorMatrixElementArgs extends FilterPrimitiveElementArgs {
 /**
  * feComponentTransfer element attributes.
  */
-export interface FeComponentTransferElementArgs extends FilterPrimitiveElementArgs {}
+export type FeComponentTransferElementArgs = FilterPrimitiveElementArgs
 
 /**
  * feFuncR/G/B/A element attributes.
@@ -498,7 +498,7 @@ export interface FeImageElementArgs extends FilterPrimitiveElementArgs {
 /**
  * feMerge element attributes.
  */
-export interface FeMergeElementArgs extends FilterPrimitiveElementArgs {}
+export type FeMergeElementArgs = FilterPrimitiveElementArgs
 
 /**
  * feMergeNode element attributes.
@@ -536,7 +536,7 @@ export interface FeSpecularLightingElementArgs extends FilterPrimitiveElementArg
 /**
  * feTile element attributes.
  */
-export interface FeTileElementArgs extends FilterPrimitiveElementArgs {}
+export type FeTileElementArgs = FilterPrimitiveElementArgs
 
 /**
  * feTurbulence element attributes.
@@ -662,10 +662,7 @@ function makeEl<Args extends BaseSvgElementArgs>(tag: string) {
   function builder(children: Children): ElementRenderSpec
   function builder(args: Args): ElementRenderSpec
   function builder(args: Args, children: Children): ElementRenderSpec
-  function builder(
-    argsOrChildren?: Args | Children,
-    children?: Children
-  ): ElementRenderSpec {
+  function builder(argsOrChildren?: Args | Children, children?: Children): ElementRenderSpec {
     if (argsOrChildren === undefined) {
       return [tag, {}]
     }
@@ -682,8 +679,7 @@ function makeEl<Args extends BaseSvgElementArgs>(tag: string) {
 }
 
 function makeVoidEl<Args extends BaseSvgElementArgs>(tag: string) {
-  return (args?: Args): ElementRenderSpec =>
-    args ? [tag, args as ElementArgs] : [tag, {}]
+  return (args?: Args): ElementRenderSpec => (args ? [tag, args as ElementArgs] : [tag, {}])
 }
 
 /**
@@ -693,7 +689,7 @@ function makeVoidEl<Args extends BaseSvgElementArgs>(tag: string) {
 export function el(
   tag: string,
   argsOrChildren?: ElementArgs | Children,
-  children?: Children
+  children?: Children,
 ): ElementRenderSpec {
   if (argsOrChildren === undefined) {
     return [tag, {}]
@@ -716,7 +712,10 @@ export function el(
  * Create an SVG root element. Automatically sets xmlns to the SVG namespace
  * unless explicitly overridden.
  */
-export function svg(argsOrChildren?: SvgElementArgs | Children, children?: Children): ElementRenderSpec {
+export function svg(
+  argsOrChildren?: SvgElementArgs | Children,
+  children?: Children,
+): ElementRenderSpec {
   if (argsOrChildren === undefined) {
     return ["svg", { xmlns: SVG_NAMESPACE }]
   }

@@ -14,6 +14,7 @@ import type {
   ElementArgs,
   ElementChildRenderSpecs,
   DomEventHandlers,
+  ElementMountCallback,
   StyleElementArgsEntries,
   PropertiesElementArgsValue,
   ElementValue,
@@ -40,7 +41,7 @@ export function el(
   // stricter `ElementArgs` intersects with Record<string, ElementValue>, which
   // (wrongly) rejects object-valued keys like `on`.
   argsOrChildren?: BaseElementArgs | Children,
-  children?: Children
+  children?: Children,
 ): ElementRenderSpec {
   if (argsOrChildren === undefined) {
     return [tag, {}]
@@ -66,6 +67,9 @@ export function el(
 export interface BaseElementArgs {
   style?: StyleElementArgsEntries
   on?: DomEventHandlers
+  // Lifecycle hook: runs after this element (and its children) are mounted,
+  // receiving the element's DOM node. Return a function to run on unmount.
+  onMount?: ElementMountCallback
   properties?: PropertiesElementArgsValue
   xmlns?: string
   id?: ElementValue
@@ -84,6 +88,7 @@ export interface BaseElementArgs {
     | ElementValue
     | StyleElementArgsEntries
     | DomEventHandlers
+    | ElementMountCallback
     | PropertiesElementArgsValue
     | undefined
 }
@@ -427,10 +432,7 @@ function makeEl<Args extends BaseElementArgs>(tag: string) {
   function builder(children: Children): ElementRenderSpec
   function builder(args: Args): ElementRenderSpec
   function builder(args: Args, children: Children): ElementRenderSpec
-  function builder(
-    argsOrChildren?: Args | Children,
-    children?: Children
-  ): ElementRenderSpec {
+  function builder(argsOrChildren?: Args | Children, children?: Children): ElementRenderSpec {
     if (argsOrChildren === undefined) {
       return [tag, {}]
     }
@@ -447,8 +449,7 @@ function makeEl<Args extends BaseElementArgs>(tag: string) {
 }
 
 function makeVoidEl<Args extends BaseElementArgs>(tag: string) {
-  return (args?: Args): ElementRenderSpec =>
-    args ? [tag, args as ElementArgs] : [tag, {}]
+  return (args?: Args): ElementRenderSpec => (args ? [tag, args as ElementArgs] : [tag, {}])
 }
 
 // ============================================================================

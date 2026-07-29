@@ -398,7 +398,10 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         // Use box-shadow as it accepts space-separated values
-        brint.render(["div", { style: { "box-shadow": ["1px", "2px", "3px", "black"] } }], container)
+        brint.render(
+          ["div", { style: { "box-shadow": ["1px", "2px", "3px", "black"] } }],
+          container,
+        )
 
         const div = container.firstChild as HTMLElement
         assert.equal(div.style.boxShadow, "1px 2px 3px black")
@@ -569,7 +572,14 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         brint.render(
-          ["div", {}, [[null, ["span", {}, "a"], ["span", {}, "b"]], ["p", {}, "c"]]],
+          [
+            "div",
+            {},
+            [
+              [null, ["span", {}, "a"], ["span", {}, "b"]],
+              ["p", {}, "c"],
+            ],
+          ],
           container,
         )
 
@@ -588,7 +598,15 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         brint.render(
-          ["div", {}, [["p", {}, "before"], [null, ["span", {}, "a"], ["span", {}, "b"]], ["p", {}, "after"]]],
+          [
+            "div",
+            {},
+            [
+              ["p", {}, "before"],
+              [null, ["span", {}, "a"], ["span", {}, "b"]],
+              ["p", {}, "after"],
+            ],
+          ],
           container,
         )
 
@@ -609,7 +627,14 @@ describe("brint", () => {
         const brint = create({ changeDomain: domain })
 
         brint.render(
-          ["div", {}, [["p", {}, "before"], [null, ["span", {}, "a"], ["span", {}, "b"]]]],
+          [
+            "div",
+            {},
+            [
+              ["p", {}, "before"],
+              [null, ["span", {}, "a"], ["span", {}, "b"]],
+            ],
+          ],
           container,
         )
 
@@ -626,7 +651,12 @@ describe("brint", () => {
 
         // [null, span-a, [null, span-b, span-c], span-d]
         brint.render(
-          [null, ["span", {}, "a"], [null, ["span", {}, "b"], ["span", {}, "c"]], ["span", {}, "d"]],
+          [
+            null,
+            ["span", {}, "a"],
+            [null, ["span", {}, "b"], ["span", {}, "c"]],
+            ["span", {}, "d"],
+          ],
           container,
         )
 
@@ -667,9 +697,7 @@ describe("brint", () => {
           [
             "div",
             {},
-            [
-              [null, ["span", {}, "1"], [null, ["span", {}, "2"], [null, ["span", {}, "3"]]]],
-            ],
+            [[null, ["span", {}, "1"], [null, ["span", {}, "2"], [null, ["span", {}, "3"]]]]],
           ],
           container,
         )
@@ -1023,7 +1051,10 @@ describe("brint", () => {
 
         const state = domain.enableChanges({ useDiv: true })
 
-        brint.render(() => (state.useDiv ? ["div", {}, "content"] : ["span", {}, "content"]), container)
+        brint.render(
+          () => (state.useDiv ? ["div", {}, "content"] : ["span", {}, "content"]),
+          container,
+        )
 
         assert.equal((container.firstChild as Element).tagName, "DIV")
 
@@ -1040,10 +1071,7 @@ describe("brint", () => {
         const state = domain.enableChanges({ value: "test" })
 
         // Use fragment syntax [null, ...children] to embed a function
-        brint.render(
-          () => ["div", {}, [null, () => ["span", {}, state.value]]],
-          container,
-        )
+        brint.render(() => ["div", {}, [null, () => ["span", {}, state.value]]], container)
 
         const div = container.firstChild as Element
         const span = div.firstChild as Element
@@ -1348,8 +1376,11 @@ describe("brint", () => {
             List,
             {
               items: users,
-              each: (user: { id: number; name: string }) =>
-                ["div", { "data-id": String(user.id) }, user.name],
+              each: (user: { id: number; name: string }) => [
+                "div",
+                { "data-id": String(user.id) },
+                user.name,
+              ],
             },
           ],
           container,
@@ -1948,7 +1979,10 @@ describe("brint", () => {
 
           const state = domain.enableChanges({ useDiv: true })
 
-          brint.render(() => (state.useDiv ? ["div", {}, "content"] : ["span", {}, "content"]), container)
+          brint.render(
+            () => (state.useDiv ? ["div", {}, "content"] : ["span", {}, "content"]),
+            container,
+          )
 
           const divBefore = container.firstChild as HTMLDivElement
           assert.equal(divBefore.tagName, "DIV")
@@ -2019,16 +2053,20 @@ describe("brint", () => {
 
           const state = domain.enableChanges({ mode: "simple" })
 
-          brint.render(
-            () => {
-              if (state.mode === "simple") {
-                return ["div", {}, "simple mode"]
-              }
-              // Use array wrapper for multiple children
-              return ["div", {}, [["span", {}, "complex"], ["span", {}, "mode"]]]
-            },
-            container,
-          )
+          brint.render(() => {
+            if (state.mode === "simple") {
+              return ["div", {}, "simple mode"]
+            }
+            // Use array wrapper for multiple children
+            return [
+              "div",
+              {},
+              [
+                ["span", {}, "complex"],
+                ["span", {}, "mode"],
+              ],
+            ]
+          }, container)
 
           assert.equal(container.textContent, "simple mode")
 
@@ -2058,16 +2096,13 @@ describe("brint", () => {
           const brint = create({ changeDomain: domain })
 
           let renderCount = 0
-          brint.render(
-            (ctx) => {
-              renderCount++
-              if (renderCount === 1) {
-                ctx.state = { count: 0 }
-              }
-              return ["div", {}, () => `Count: ${ctx.state.count}`]
-            },
-            container,
-          )
+          brint.render((ctx) => {
+            renderCount++
+            if (renderCount === 1) {
+              ctx.state = { count: 0 }
+            }
+            return ["div", {}, () => `Count: ${ctx.state.count}`]
+          }, container)
 
           assert.equal(renderCount, 1)
           assert.equal(container.textContent, "Count: 0")
@@ -2080,17 +2115,14 @@ describe("brint", () => {
           let savedCtx: { state: { count: number } } | null = null
           let renderCount = 0
 
-          brint.render(
-            (ctx) => {
-              renderCount++
-              if (!savedCtx) {
-                ctx.state = { count: 0 }
-                savedCtx = ctx as { state: { count: number } }
-              }
-              return ["div", {}, () => `Count: ${ctx.state.count}`]
-            },
-            container,
-          )
+          brint.render((ctx) => {
+            renderCount++
+            if (!savedCtx) {
+              ctx.state = { count: 0 }
+              savedCtx = ctx as { state: { count: number } }
+            }
+            return ["div", {}, () => `Count: ${ctx.state.count}`]
+          }, container)
 
           assert.equal(renderCount, 1)
           assert.equal(container.textContent, "Count: 0")
@@ -2109,16 +2141,13 @@ describe("brint", () => {
           let mountCalled = false
           let nodeReceived: Node | null = null
 
-          brint.render(
-            (ctx) => {
-              ctx.onMount((node) => {
-                mountCalled = true
-                nodeReceived = node
-              })
-              return ["div", {}, "hello"]
-            },
-            container,
-          )
+          brint.render((ctx) => {
+            ctx.onMount((node) => {
+              mountCalled = true
+              nodeReceived = node
+            })
+            return ["div", {}, "hello"]
+          }, container)
 
           assert.equal(mountCalled, true)
           // FunctionRenderSpec has no DOM node, so node should be null
@@ -2138,15 +2167,12 @@ describe("brint", () => {
             return ["span", {}, "child"]
           }
 
-          brint.render(
-            (ctx) => {
-              ctx.onMount(() => {
-                callOrder.push("parent")
-              })
-              return [null, childFn]
-            },
-            container,
-          )
+          brint.render((ctx) => {
+            ctx.onMount(() => {
+              callOrder.push("parent")
+            })
+            return [null, childFn]
+          }, container)
 
           // Child's onMount should fire before parent's
           assert.deepEqual(callOrder, ["child", "parent"])
@@ -2158,17 +2184,14 @@ describe("brint", () => {
 
           let cleanupCalled = false
 
-          const handle = brint.render(
-            (ctx) => {
-              ctx.onMount(() => {
-                return () => {
-                  cleanupCalled = true
-                }
-              })
-              return ["div", {}, "hello"]
-            },
-            container,
-          )
+          const handle = brint.render((ctx) => {
+            ctx.onMount(() => {
+              return () => {
+                cleanupCalled = true
+              }
+            })
+            return ["div", {}, "hello"]
+          }, container)
 
           assert.equal(cleanupCalled, false)
 
@@ -2192,22 +2215,90 @@ describe("brint", () => {
             return ["span", {}, "child"]
           }
 
-          const handle = brint.render(
-            (ctx) => {
-              ctx.onMount(() => {
-                return () => {
-                  cleanupOrder.push("parent")
-                }
-              })
-              return [null, childFn]
-            },
-            container,
-          )
+          const handle = brint.render((ctx) => {
+            ctx.onMount(() => {
+              return () => {
+                cleanupOrder.push("parent")
+              }
+            })
+            return [null, childFn]
+          }, container)
 
           handle.unmount()
 
           // Children cleanup before parent
           assert.deepEqual(cleanupOrder, ["child", "parent"])
+        })
+
+        it("should call element onMount with the element's own DOM node", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          let nodeReceived: Node | null = null
+
+          brint.render(
+            [
+              "input",
+              {
+                onMount: (node) => {
+                  nodeReceived = node
+                },
+              },
+            ],
+            container,
+          )
+
+          // Unlike component onMount (null node), an element gets its real node
+          assert.ok(nodeReceived)
+          assert.equal(nodeReceived, container.querySelector("input"))
+        })
+
+        it("should fire element onMount after the element's children are mounted", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          let childCountAtMount = -1
+
+          brint.render(
+            [
+              "div",
+              {
+                onMount: (node) => {
+                  childCountAtMount = (node as Element).childNodes.length
+                },
+              },
+              ["a", "b"],
+            ],
+            container,
+          )
+
+          assert.equal(childCountAtMount, 2)
+        })
+
+        it("should run element onMount cleanup on unmount", () => {
+          const domain = new ChangeDomain()
+          const brint = create({ changeDomain: domain })
+
+          const events: string[] = []
+
+          const handle = brint.render(
+            [
+              "input",
+              {
+                onMount: () => {
+                  events.push("mount")
+                  return () => events.push("cleanup")
+                },
+              },
+            ],
+            container,
+          )
+
+          assert.deepEqual(events, ["mount"])
+
+          handle.unmount()
+
+          assert.deepEqual(events, ["mount", "cleanup"])
         })
       })
 
@@ -2221,21 +2312,18 @@ describe("brint", () => {
 
           // The outer function reads state.value to create a dependency
           // This ensures reconciliation happens when state.value changes
-          brint.render(
-            () => {
-              const currentValue = state.value // Create dependency on state.value
-              return (ctx) => {
-                ctx.onMount(() => {
-                  events.push(`mount:${currentValue}`)
-                  return () => {
-                    events.push(`cleanup:${currentValue}`)
-                  }
-                })
-                return ["div", `Value: ${currentValue}`]
-              }
-            },
-            container,
-          )
+          brint.render(() => {
+            const currentValue = state.value // Create dependency on state.value
+            return (ctx) => {
+              ctx.onMount(() => {
+                events.push(`mount:${currentValue}`)
+                return () => {
+                  events.push(`cleanup:${currentValue}`)
+                }
+              })
+              return ["div", `Value: ${currentValue}`]
+            }
+          }, container)
 
           assert.deepEqual(events, ["mount:1"])
 
@@ -2256,19 +2344,16 @@ describe("brint", () => {
           const trigger = domain.enableChanges({ version: 1 })
 
           // The outer function reads trigger.version to create a dependency
-          brint.render(
-            () => {
-              const version = trigger.version // Create dependency
-              return (ctx) => {
-                if (!ctx.state || ctx.state.initialized !== true) {
-                  ctx.state = { initialized: true, value: version * 10 }
-                }
-                stateValues.push(ctx.state.value)
-                return ["div", {}, `State: ${ctx.state.value}`]
+          brint.render(() => {
+            const version = trigger.version // Create dependency
+            return (ctx) => {
+              if (!ctx.state || ctx.state.initialized !== true) {
+                ctx.state = { initialized: true, value: version * 10 }
               }
-            },
-            container,
-          )
+              stateValues.push(ctx.state.value)
+              return ["div", {}, `State: ${ctx.state.value}`]
+            }
+          }, container)
 
           assert.deepEqual(stateValues, [10])
           assert.equal(container.textContent, "State: 10")

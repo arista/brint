@@ -29,6 +29,10 @@ export type RenderSpec =
   | ElementRenderSpec
   | FunctionRenderSpec
   | FragmentRenderSpec
+  // ListRenderSpec's T is invariant (it appears in both Array<T> and (item: T) => ...
+  // positions), so `any` is the only argument that lets a ListRenderSpec<SpecificT>
+  // (e.g. from list()) stay assignable to RenderSpec. unknown/never break one side.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | ListRenderSpec<any>
   | ManageRenderSpec
 
@@ -53,6 +57,7 @@ export type ElementArgs = {
   on?: DomEventHandlers
   properties?: PropertiesElementArgsValue
   xmlns?: string
+  onMount?: OnMountCallback
 } & NormalElementArgs
 
 export type NormalElementArgs = Record<string, ElementValue>
@@ -136,6 +141,15 @@ export type ListItemFn<T> = (item: T, index: number) => RenderSpec
  * If the callback returns a function, that function will be called during cleanup.
  */
 export type OnMountCallback = (node: Node | null) => void | (() => void)
+
+/**
+ * Callback for an element's `onMount` arg (see `BaseElementArgs`). Unlike the
+ * component-level `ctx.onMount` (whose node is null — a component has no single
+ * DOM node), an element always has its own node, so this receives a non-null
+ * `Node`. If it returns a function, that function runs when the element is
+ * removed (unmount cleanup).
+ */
+export type ElementMountCallback = (node: Node) => void | (() => void)
 
 /**
  * RenderContext provides lifecycle notifications and state management

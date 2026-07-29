@@ -39,16 +39,21 @@ ElementArgs = combined Record type with these possible elements:
   NormalElementArgs
   StyleElementArgs
   OnElementArgs
+  OnMountElementArgs
   PropertiesElementArgs
   XmlnsElementArgs
 
-NormalElementArgs = Record<any string except ["on", "properties", "xmlns", "style"], ElementValue>
+NormalElementArgs = Record<any string except ["on", "onMount", "properties", "xmlns", "style"], ElementValue>
 
 StyleElementArgs = Record<"style", StyleElementArgsEntries>
 
 StyleElementArgsEntries = Record<string, ElementValue>
 
 OnElementArgs = Record<"on", DomEventHandlers>
+
+OnMountElementArgs = Record<"onMount", ElementMountCallback>
+
+ElementMountCallback = (node: Node) => void | (() => void)
 
 DomEventHandlers = Record<string, DomEventHandler>
 
@@ -481,20 +486,27 @@ The state is removed when the RenderNode is unmounted.
 
 ### onMount
 
-The `onMount` function registers a callback that runs after the RenderNode and all its children have been rendered and added to the DOM.
+`onMount` registers a callback that runs after the RenderNode and all its children have been rendered and added to the DOM. There are two entry points, differing only in which RenderNode the callback is registered on:
+
+- **`ctx.onMount(cb)`** — registered on a **FunctionRenderSpec** (component) node. That node has no DOM node of its own, so the callback's `node` is always `null`. Use it as a pure lifecycle/cleanup hook.
+- **`onMount` element arg** (`h.div({ onMount: cb })`) — registered on the **ElementRenderSpec** node, whose `node` _is_ the element. Use it when you need the actual DOM node (focus, measure, attach an observer). This is the ergonomic path for node access, since a component's node is fundamentally ambiguous (it may render a fragment/list/nothing).
 
 **Timing:** Callbacks are called synchronously in bottom-up order. When a node's onMount fires:
+
 - This node's DOM exists (if applicable)
 - All children's DOM exists
 - All children's onMount callbacks have already fired
 - Parent's onMount has not yet fired
 
 **The node parameter:** The callback receives `renderNode.node`, which is:
-- The Element for ElementRenderSpec
-- The Text node for TextRenderSpec
-- null for FunctionRenderSpec, ComponentRenderSpec, FragmentRenderSpec, ListRenderSpec, NullRenderSpec
 
-**Cleanup:** If the callback returns a function, that function is called during cleanup (before the node is removed). Cleanup also runs in bottom-up order: children's cleanup runs before parent's cleanup.
+- The Element for ElementRenderSpec (i.e. what the element `onMount` arg sees)
+- The Text node for TextRenderSpec
+- null for FunctionRenderSpec, ComponentRenderSpec, FragmentRenderSpec, ListRenderSpec, NullRenderSpec (i.e. what `ctx.onMount` sees)
+
+**Cleanup:** If the callback returns a function, that function is called when the node is removed. Cleanup runs on every removal path — reconciliation (`reconcileFunctionSpec`), and direct removal via lists/conditionals/`unmount()` (`RenderNode.remove()` and `cleanupRenderNode`, both of which run `lifecycleCleanups`). Cleanup also runs in bottom-up order: children's cleanup runs before parent's.
+
+An element's `onMount` fires once when the element is created; it does not re-fire on reconciliation of that same element (only the component-level `ctx.onMount` re-fires, per the reconciliation behavior below).
 
 ```
 (ctx) => {
@@ -516,6 +528,7 @@ The `onMount` function registers a callback that runs after the RenderNode and a
 ### Reconciliation Behavior
 
 When a FunctionRenderSpec or ComponentRenderSpec is reconciled (reused during re-rendering), it is treated as an unmount followed by a mount:
+
 1. Cleanup callbacks from the old spec are called
 2. The RenderNode's reactive state is cleared
 3. The new spec is set up fresh

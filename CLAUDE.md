@@ -9,11 +9,13 @@ This library depends on chchchchanges to provide reactivity support. For now, as
 When assertions fail, Node's assert module tries to inspect and serialize the values to generate error messages. Happy-dom DOM elements have circular parent/child references that cause infinite traversal, leading to heap exhaustion and test hangs.
 
 Instead of:
+
 ```typescript
 assert.equal(container.firstChild, span) // HANGS if elements differ
 ```
 
 Use manual comparison or compare specific properties:
+
 ```typescript
 // Compare references manually
 if (container.firstChild !== span) {

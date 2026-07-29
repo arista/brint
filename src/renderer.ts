@@ -330,7 +330,13 @@ function applyAttributes(
 ): void {
   for (const [key, value] of Object.entries(args)) {
     // Skip special keys - handled separately
-    if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
+    if (
+      key === "style" ||
+      key === "on" ||
+      key === "properties" ||
+      key === "xmlns" ||
+      key === "onMount"
+    ) {
       continue
     }
 
@@ -682,11 +688,7 @@ export function render(
     if (elementXmlns) {
       element = document.createElementNS(elementXmlns, tagName)
     } else {
-      try {
-        element = document.createElement(tagName)
-      } catch (e) {
-        throw e
-      }
+      element = document.createElement(tagName)
     }
 
     renderNode.node = element
@@ -704,6 +706,17 @@ export function render(
     // Render children
     if (children !== null) {
       renderElementChildren(renderNode, element, children, elementXmlns, domain)
+    }
+
+    // Element-level onMount: fire once the element and its children are mounted,
+    // passing this element's DOM node (renderNode.node, set above). Any returned
+    // cleanup is stored in lifecycleCleanups and run when the element is removed.
+    if (typeof args?.onMount === "function") {
+      if (!renderNode.onMountCallbacks) {
+        renderNode.onMountCallbacks = []
+      }
+      renderNode.onMountCallbacks.push(args.onMount)
+      callOnMountCallbacks(renderNode)
     }
 
     return renderNode
@@ -811,6 +824,10 @@ function insertDomNodeForRenderNode(renderNode: RenderNode, parentDomNode: Node)
  * Clean up a RenderNode's internal state (CachedFunctions, etc.) without removing from parent
  */
 function cleanupRenderNode(renderNode: RenderNode): void {
+  // Run onMount cleanup callbacks (unmount). Removal via lists/conditionals goes
+  // through here, not reconciliation, so without this the cleanups would leak.
+  callLifecycleCleanups(renderNode)
+
   // Clean up this node's reactive state
   if (renderNode.reactiveAttributes) {
     renderNode.reactiveAttributes = null
@@ -1175,7 +1192,13 @@ function reconcileElement(
   const newAttrNames = new Set<string>()
   if (args) {
     for (const key of Object.keys(args)) {
-      if (key === "style" || key === "on" || key === "properties" || key === "xmlns") {
+      if (
+        key === "style" ||
+        key === "on" ||
+        key === "properties" ||
+        key === "xmlns" ||
+        key === "onMount"
+      ) {
         continue
       }
       newAttrNames.add(key)
