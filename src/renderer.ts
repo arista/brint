@@ -322,12 +322,13 @@ function applyAttributeValue(element: Element, key: string, value: ReactiveEleme
 /**
  * Apply attributes to a DOM element, supporting reactive values.
  */
+/** Returns the attribute names applied, which are also recorded on the RenderNode. */
 function applyAttributes(
   element: Element,
   args: ElementArgs,
   domain: ChangeDomain,
   renderNode: RenderNode,
-): void {
+): Set<string> {
   for (const [key, value] of Object.entries(args)) {
     // Skip special keys - handled separately
     if (
@@ -358,6 +359,12 @@ function applyAttributes(
     // Apply the initial value
     applyAttributeValue(element, key, reactiveValue)
 
+    // Record it as brint-managed so reconciliation knows it may remove it later
+    if (!renderNode.managedAttributes) {
+      renderNode.managedAttributes = new Set()
+    }
+    renderNode.managedAttributes.add(key)
+
     // If reactive, store for updates
     if (isReactive) {
       if (!renderNode.reactiveAttributes) {
@@ -366,6 +373,8 @@ function applyAttributes(
       renderNode.reactiveAttributes.set(key, { value: reactiveValue, update })
     }
   }
+
+  return renderNode.managedAttributes ?? new Set()
 }
 
 /**
@@ -399,16 +408,17 @@ function applyStyleValue(
  * Style property names are real (kebab-case) CSS names, e.g. "background-color"
  * or custom properties like "--show-duration" (matching the setProperty API).
  */
+/** Returns the style properties applied, which are also recorded on the RenderNode. */
 function applyStyles(
   element: Element,
   styles: Record<string, unknown>,
   domain: ChangeDomain,
   renderNode: RenderNode,
-): void {
+): Set<string> {
   // Check if element has a style property (HTMLElement or SVGElement)
   const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
   if (!elementWithStyle.style) {
-    return
+    return new Set()
   }
 
   for (const [property, value] of Object.entries(styles)) {
@@ -438,6 +448,12 @@ function applyStyles(
       reactiveValue,
     )
 
+    // Record it as brint-managed (see RenderNode.managedStyles)
+    if (!renderNode.managedStyles) {
+      renderNode.managedStyles = new Set()
+    }
+    renderNode.managedStyles.add(property)
+
     // If reactive, store for updates
     if (isReactive) {
       if (!renderNode.reactiveStyles) {
@@ -446,6 +462,8 @@ function applyStyles(
       renderNode.reactiveStyles.set(property, { value: reactiveValue, update })
     }
   }
+
+  return renderNode.managedStyles ?? new Set()
 }
 
 /**
@@ -1192,59 +1210,41 @@ function reconcileElement(
   // Clean up old reactive state
   clearReactiveState(existingNode)
 
-  // Get old attribute names from the element
-  const oldAttrNames = new Set<string>()
-  for (let i = 0; i < element.attributes.length; i++) {
-    oldAttrNames.add(element.attributes[i]!.name)
-  }
+  // What brint set last time. Deliberately NOT read off the element: anything the
+  // element set on itself is not ours to remove (see RenderNode.managedAttributes).
+  const oldAttrNames = existingNode.managedAttributes
+  existingNode.managedAttributes = null
 
-  // Apply new attributes and track which ones we're keeping
-  const newAttrNames = new Set<string>()
-  if (args) {
-    for (const key of Object.keys(args)) {
-      if (
-        key === "style" ||
-        key === "on" ||
-        key === "properties" ||
-        key === "xmlns" ||
-        key === "onMount"
-      ) {
-        continue
+  // Apply new attributes; applyAttributes repopulates managedAttributes
+  const newAttrNames = args ? applyAttributes(element, args, domain, existingNode) : null
+
+  // Remove ours that are no longer present
+  if (oldAttrNames) {
+    for (const oldName of oldAttrNames) {
+      if (!newAttrNames?.has(oldName)) {
+        element.removeAttribute(oldName)
       }
-      newAttrNames.add(key)
-    }
-    applyAttributes(element, args, domain, existingNode)
-  }
-
-  // Remove old attributes that are no longer present
-  for (const oldName of oldAttrNames) {
-    if (!newAttrNames.has(oldName)) {
-      element.removeAttribute(oldName)
     }
   }
 
   // Handle styles
   const elementWithStyle = element as Element & { style?: CSSStyleDeclaration }
   if (elementWithStyle.style) {
-    // Get old style property names
-    const oldStyleNames = new Set<string>()
-    for (let i = 0; i < elementWithStyle.style.length; i++) {
-      oldStyleNames.add(elementWithStyle.style[i]!)
-    }
+    // Ours from last time — not read off element.style, for the same reason as
+    // attributes: an element may set its own inline styles.
+    const oldStyleNames = existingNode.managedStyles
+    existingNode.managedStyles = null
 
-    // Apply new styles
-    const newStyleNames = new Set<string>()
-    if (args?.style) {
-      for (const key of Object.keys(args.style)) {
-        newStyleNames.add(key)
-      }
-      applyStyles(element, args.style, domain, existingNode)
-    }
+    const newStyleNames = args?.style
+      ? applyStyles(element, args.style, domain, existingNode)
+      : null
 
-    // Remove old styles that are no longer present
-    for (const oldName of oldStyleNames) {
-      if (!newStyleNames.has(oldName)) {
-        elementWithStyle.style.removeProperty(oldName)
+    // Remove ours that are no longer present
+    if (oldStyleNames) {
+      for (const oldName of oldStyleNames) {
+        if (!newStyleNames?.has(oldName)) {
+          elementWithStyle.style.removeProperty(oldName)
+        }
       }
     }
   }

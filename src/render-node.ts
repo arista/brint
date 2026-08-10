@@ -93,6 +93,16 @@ export class RenderNode {
   /** Event listeners added to this element (for cleanup during reconciliation) */
   eventListeners: Map<string, RenderNodeEventListener> | null = null
 
+  /**
+   * Attribute names brint itself applied to this element, and style properties
+   * it set. Reconciliation removes what is no longer in the spec, and it must
+   * remove only from these — never from whatever the element currently carries.
+   * A custom element that reflects its own state (`wa-dialog` writes `open` when
+   * it opens) would otherwise have that state stripped by the next reconcile.
+   */
+  managedAttributes: Set<string> | null = null
+  managedStyles: Set<string> | null = null
+
   /** CachedFunction for FunctionRenderSpec nodes */
   functionCachedFunction: CachedFunction<unknown> | null = null
 

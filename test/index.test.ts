@@ -2459,6 +2459,81 @@ describe("brint", () => {
     })
   })
 
+  describe("reconciliation and self-set attributes", () => {
+    let container: Element
+
+    beforeEach(() => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+    })
+
+    // A custom element that reflects its own state writes attributes brint never
+    // set. Reconciliation must leave those alone — stripping them silently
+    // reverts the element's state (wa-dialog reflects `open`, so losing it closes
+    // the dialog).
+    it("does not remove an attribute the element set on itself", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const model = domain.enableChanges({ label: "one" })
+
+      brint.render(
+        component((m: { label: string }) => ["my-dialog", { class: "d", label: m.label }], model),
+        container,
+      )
+
+      const el = container.querySelector(".d")!
+      el.setAttribute("open", "") // the element opening itself
+
+      model.label = "two" // triggers a re-render → reconcileElement
+
+      assert.equal(el.getAttribute("label"), "two") // brint's own attribute updated
+      assert.equal(el.hasAttribute("open"), true) // the element's own state survives
+    })
+
+    it("still removes an attribute brint set that is no longer in the spec", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const model = domain.enableChanges({ withTitle: true })
+
+      brint.render(
+        component(
+          (m: { withTitle: boolean }) =>
+            m.withTitle ? ["div", { class: "d", title: "t" }] : ["div", { class: "d" }],
+          model,
+        ),
+        container,
+      )
+
+      const el = container.querySelector(".d")!
+      assert.equal(el.getAttribute("title"), "t")
+
+      model.withTitle = false
+      assert.equal(el.hasAttribute("title"), false)
+    })
+
+    it("does not remove an inline style the element set on itself", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const model = domain.enableChanges({ color: "red" })
+
+      brint.render(
+        component(
+          (m: { color: string }) => ["div", { class: "d", style: { color: m.color } }],
+          model,
+        ),
+        container,
+      )
+
+      const el = container.querySelector(".d") as HTMLElement
+      el.style.setProperty("--self-set", "7px")
+
+      model.color = "blue"
+
+      assert.equal(el.style.getPropertyValue("color"), "blue")
+      assert.equal(el.style.getPropertyValue("--self-set"), "7px")
+    })
+  })
+
   describe("stale reactive callbacks", () => {
     let container: Element
 
