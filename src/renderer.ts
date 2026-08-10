@@ -665,6 +665,16 @@ export function render(
   xmlns: string | null,
   domain: ChangeDomain,
 ): RenderNode {
+  return deferMounts(() => renderInner(spec, parentNode, parentDomNode, xmlns, domain))
+}
+
+function renderInner(
+  spec: RenderSpec,
+  parentNode: RenderNode | null,
+  parentDomNode: Node | null,
+  xmlns: string | null,
+  domain: ChangeDomain,
+): RenderNode {
   const renderNode = new RenderNode(spec)
   renderNode.xmlns = xmlns
 
@@ -734,7 +744,7 @@ export function render(
         renderNode.onMountCallbacks = []
       }
       renderNode.onMountCallbacks.push(args.onMount)
-      callOnMountCallbacks(renderNode)
+      scheduleMount(renderNode)
     }
 
     return renderNode
@@ -783,8 +793,8 @@ export function render(
     const actualParentDomNode = parentDomNode || renderNode.findParentDomNode()
     const childSpec = setupFunctionSpec(renderNode, spec, actualParentDomNode, xmlns, domain)
     render(childSpec, renderNode, actualParentDomNode, xmlns, domain)
-    // Call onMount callbacks after children are rendered (bottom-up order)
-    callOnMountCallbacks(renderNode)
+    // Queue onMount after children are rendered (bottom-up order)
+    scheduleMount(renderNode)
     return renderNode
   }
 
@@ -1141,18 +1151,22 @@ function reconcileChildren(
       // Reconcile existing child
       reconcile(childSpec, existingChild, parentDomNode, xmlns, domain)
     } else if (existingChild) {
-      // Can't reconcile - remove and render fresh
-      existingChild.remove()
-      // Render new child at this position
-      const newChild = render(childSpec, null, parentDomNode, xmlns, domain)
-      // Insert at the correct position in the RenderNode tree
-      parentNode.insertChildAt(i, newChild)
-      // render() inserted the DOM node while newChild was still unlinked, so it
-      // could not know its siblings and landed at the front of parentDomNode. Now
-      // that it's linked, move it into the position its siblings dictate.
-      if (parentDomNode) {
-        insertDomNodeForRenderNode(newChild, parentDomNode)
-      }
+      // Can't reconcile - remove and render fresh. Held open across the move
+      // below so onMount sees the node in its final position, not the temporary
+      // one (see deferMounts).
+      deferMounts(() => {
+        existingChild.remove()
+        // Render new child at this position
+        const newChild = render(childSpec, null, parentDomNode, xmlns, domain)
+        // Insert at the correct position in the RenderNode tree
+        parentNode.insertChildAt(i, newChild)
+        // render() inserted the DOM node while newChild was still unlinked, so it
+        // could not know its siblings and landed at the front of parentDomNode. Now
+        // that it's linked, move it into the position its siblings dictate.
+        if (parentDomNode) {
+          insertDomNodeForRenderNode(newChild, parentDomNode)
+        }
+      })
     } else {
       // No existing child - render new one
       render(childSpec, parentNode, parentDomNode, xmlns, domain)
@@ -1320,6 +1334,40 @@ function createRenderContext(renderNode: RenderNode, domain: ChangeDomain): Rend
  * Should be called after children are rendered (bottom-up order).
  * Stores any returned cleanup functions.
  */
+/**
+ * onMount must observe the node where it will actually live. Several code paths
+ * render a node and only afterwards move it into position — reconcileChildren's
+ * replace branch, and renderItemAt for a mid-list insert — and moving a DOM node
+ * is a remove + insert, which blurs it. Firing onMount before the move means a
+ * callback that focuses its element silently loses that focus to <body>.
+ *
+ * So mounts are queued for the duration of a render pass and flushed once the
+ * tree has settled. Nested passes join the outermost queue.
+ */
+let mountQueue: RenderNode[] | null = null
+
+function deferMounts<T>(fn: () => T): T {
+  if (mountQueue) return fn()
+  const queue: RenderNode[] = []
+  mountQueue = queue
+  try {
+    return fn()
+  } finally {
+    mountQueue = null
+    for (const node of queue) {
+      callOnMountCallbacks(node)
+    }
+  }
+}
+
+function scheduleMount(renderNode: RenderNode): void {
+  if (mountQueue) {
+    mountQueue.push(renderNode)
+  } else {
+    callOnMountCallbacks(renderNode)
+  }
+}
+
 function callOnMountCallbacks(renderNode: RenderNode): void {
   if (!renderNode.onMountCallbacks) return
 
@@ -1409,16 +1457,19 @@ function setupListSpec(
   }
 
   // Helper to render an item and insert at a specific position
-  const renderItemAt = (index: number, item: unknown): RenderNode => {
-    // Render the item (appends to end)
-    const childRenderNode = renderItem(item, index)
-    // Move it to the correct position
-    const currentIndex = renderNode.children.indexOf(childRenderNode)
-    if (currentIndex !== index && currentIndex !== -1) {
-      moveChildToIndex(renderNode, childRenderNode, index, actualParentDomNode)
-    }
-    return childRenderNode
-  }
+  const renderItemAt = (index: number, item: unknown): RenderNode =>
+    // Held open across the move so onMount sees the item at its final index
+    // rather than appended at the end (see deferMounts).
+    deferMounts(() => {
+      // Render the item (appends to end)
+      const childRenderNode = renderItem(item, index)
+      // Move it to the correct position
+      const currentIndex = renderNode.children.indexOf(childRenderNode)
+      if (currentIndex !== index && currentIndex !== -1) {
+        moveChildToIndex(renderNode, childRenderNode, index, actualParentDomNode)
+      }
+      return childRenderNode
+    })
 
   // Handle surgical list changes
   const handleListChange = (change: Change) => {
@@ -1703,8 +1754,8 @@ function reconcileFunctionSpec(
     render(childSpec, existingNode, actualParentDomNode, xmlns, domain)
   }
 
-  // Call onMount callbacks (mount part of reconciliation)
-  callOnMountCallbacks(existingNode)
+  // Queue onMount callbacks (mount part of reconciliation)
+  scheduleMount(existingNode)
 }
 
 /**

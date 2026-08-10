@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import { Window } from "happy-dom"
-import { create, List, RenderNode, component, list } from "../src/index.js"
+import { create, List, RenderNode, component, list, type RenderSpec } from "../src/index.js"
 import { ChangeDomain, getProxyState } from "chchchchanges"
 
 // Set up DOM environment
@@ -2456,6 +2456,72 @@ describe("brint", () => {
       assert.deepEqual(order(), ["2", "3", "1", "4"])
       assert.equal(nodeOf("1")!.__tag, "N1") // moved node preserved, not rebuilt
       assert.equal(nodeOf("3")!.__tag, "N3") // untouched node preserved
+    })
+  })
+
+  describe("onMount position", () => {
+    let container: Element
+
+    beforeEach(() => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+    })
+
+    // A node that is rendered and then moved into position loses focus, because
+    // moving a DOM node is a remove + insert. onMount must therefore run only
+    // once the node is where it will stay.
+    it("keeps focus taken in onMount when a child is replaced", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const m = domain.enableChanges({ page: "a" as "a" | "b" })
+
+      const Page = (p: { page: string }): RenderSpec =>
+        p.page === "a"
+          ? [
+              "form",
+              {},
+              [
+                ["span", { class: "x" }],
+                ["button", { class: "y" }],
+              ],
+            ]
+          : [
+              "form",
+              {},
+              [
+                ["div", { class: "frame" }],
+                [
+                  "input",
+                  { class: "target", onMount: (el: Node | null) => (el as HTMLElement).focus() },
+                ],
+              ],
+            ]
+
+      brint.render(component(Page, m), container)
+      m.page = "b"
+
+      assert.equal((document.activeElement as Element | null)?.className, "target")
+    })
+
+    it("keeps focus taken in onMount when an item is inserted mid-list", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const items = domain.enableChanges([{ id: 2 }])
+      brint.render(
+        list(items, (i: { id: number }) => [
+          "input",
+          { class: `i${i.id}`, onMount: (el: Node | null) => (el as HTMLElement).focus() },
+        ]),
+        container,
+      )
+      assert.equal((document.activeElement as Element | null)?.className, "i2")
+
+      items.unshift({ id: 1 })
+      assert.equal((document.activeElement as Element | null)?.className, "i1")
+      assert.deepEqual(
+        [...container.querySelectorAll("input")].map((n) => n.className),
+        ["i1", "i2"],
+      )
     })
   })
 
