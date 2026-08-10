@@ -103,7 +103,7 @@ export class RenderNode {
   listItemsListener: SubscriptionListener | null = null
 
   /** Current list items array (for unsubscribing and surgical updates) */
-  list: unknown[] | null = null
+  list: readonly unknown[] | null = null
 
   /**
    * Detaches this node's list subscription from whatever array it is currently

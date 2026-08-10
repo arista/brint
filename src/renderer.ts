@@ -1391,14 +1391,14 @@ function setupListSpec(
   }
 
   // Helper to render all items
-  const renderItems = (itemsArray: unknown[]) => {
+  const renderItems = (itemsArray: readonly unknown[]) => {
     for (let i = 0; i < itemsArray.length; i++) {
       renderItem(itemsArray[i], i)
     }
   }
 
   // Helper to clear and re-render all items (full regeneration)
-  const regenerateItems = (itemsArray: unknown[]) => {
+  const regenerateItems = (itemsArray: readonly unknown[]) => {
     // Remove all existing children
     const childrenToRemove = [...renderNode.children]
     for (const child of childrenToRemove) {
@@ -1606,7 +1606,7 @@ function setupListSpec(
     renderNode.listItemsCachedFunction = itemsCF
 
     // Initial render
-    const initialItems = itemsCF.call() as unknown[]
+    const initialItems = itemsCF.call() as readonly unknown[]
     renderNode.list = initialItems
     renderItems(initialItems)
 
@@ -1628,7 +1628,7 @@ function setupListSpec(
       renderNode.listUnsubscribe?.()
 
       // Get new items
-      const newItems = itemsCF.call() as unknown[]
+      const newItems = itemsCF.call() as readonly unknown[]
       renderNode.list = newItems
 
       // Full regeneration since this is a new array

@@ -125,9 +125,13 @@ export type ListItemsSpec<T> = {
   each: ListItemFn<T>
 }
 
-export type ListSource<T> = T[] | ListSourceFn<T>
+// Readonly: brint only ever reads the source array — it subscribes to it and
+// iterates it, and never mutates it. Accepting `readonly T[]` lets an owning
+// collection hand over its ordering directly (multindex's `orderedArray` is
+// readonly precisely because the index is its sole author) without a cast.
+export type ListSource<T> = readonly T[] | ListSourceFn<T>
 
-export type ListSourceFn<T> = () => T[]
+export type ListSourceFn<T> = () => readonly T[]
 
 export type ListItemFn<T> = (item: T, index: number) => RenderSpec
 
