@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import { Window } from "happy-dom"
-import { create, List, RenderNode } from "../src/index.js"
+import { create, List, RenderNode, component, list } from "../src/index.js"
 import { ChangeDomain, getProxyState } from "chchchchanges"
 
 // Set up DOM environment
@@ -2456,6 +2456,144 @@ describe("brint", () => {
       assert.deepEqual(order(), ["2", "3", "1", "4"])
       assert.equal(nodeOf("1")!.__tag, "N1") // moved node preserved, not rebuilt
       assert.equal(nodeOf("3")!.__tag, "N3") // untouched node preserved
+    })
+  })
+
+  describe("stale reactive callbacks", () => {
+    let container: Element
+
+    beforeEach(() => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+    })
+
+    // A component that derives its list *during its own render* ends up depending on
+    // the source array, so one mutation both (a) queues a surgical update for the
+    // list it already rendered and (b) invalidates the component. The component
+    // re-renders first (after-notifications drain before subscription callbacks),
+    // reconciling the list node with a freshly derived array — and then the queued
+    // surgical update fires against the superseded list, appending a duplicate.
+    it("does not double-render when a list is reconciled in the same transaction as its update", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const model = domain.enableChanges({ items: [] as Array<{ id: number }> })
+
+      const Items = (props: { items: Array<{ id: number }> }) =>
+        list(
+          () => props.items,
+          (m: { id: number }) => ["div", { class: "item", "data-id": String(m.id) }],
+        )
+
+      // Derived on every read, mirroring a projector that builds its props lazily.
+      const containerProps = {
+        get itemsProps() {
+          return {
+            items: domain.createMappedArray(model.items, (i: { id: number }) => ({ id: i.id })),
+          }
+        },
+      }
+
+      const Container = (props: typeof containerProps) => [
+        "div",
+        {},
+        [component(Items, props.itemsProps)],
+      ]
+
+      brint.render(component(Container, containerProps), container)
+
+      const ids = () =>
+        [...container.querySelectorAll(".item")].map((n) => n.getAttribute("data-id"))
+
+      model.items.push({ id: 1 })
+      assert.deepEqual(ids(), ["1"])
+
+      model.items.push({ id: 2 })
+      assert.deepEqual(ids(), ["1", "2"])
+
+      model.items.splice(0, 1)
+      assert.deepEqual(ids(), ["2"])
+    })
+
+    // The renderer only unsubscribes a list on reconcile, not on removal, so an
+    // unmounted list stays in its source array's subscriber set. It must at least
+    // stay inert: before the staleness guard it went on rendering items into the
+    // container it had already been unmounted from.
+    it("does not render into a container after unmount", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const items = domain.enableChanges([{ id: 1 }])
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+
+      const handle = brint.render(
+        list(
+          () => items,
+          (m: { id: number }) => ["div", { class: "item", "data-id": String(m.id) }],
+        ),
+        container,
+      )
+      assert.equal(container.querySelectorAll(".item").length, 1)
+
+      handle.unmount()
+      assert.equal(container.innerHTML, "")
+
+      items.push({ id: 2 })
+      assert.equal(container.innerHTML, "")
+    })
+
+    it("unsubscribes from its source array on unmount", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const items = domain.enableChanges([{ id: 1 }])
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+
+      const subs = () => getProxyState(items)?.objectSubscriptions?.size ?? 0
+
+      const handle = brint.render(
+        list(
+          () => items,
+          (m: { id: number }) => ["div", { class: "item", "data-id": String(m.id) }],
+        ),
+        container,
+      )
+      assert.equal(subs(), 1)
+
+      handle.unmount()
+      assert.equal(subs(), 0)
+    })
+
+    it("unsubscribes a nested list when an ancestor is removed", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const inner = domain.enableChanges([{ id: 1 }])
+      const outer = domain.enableChanges([{ show: true }])
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+
+      const subs = () => getProxyState(inner)?.objectSubscriptions?.size ?? 0
+
+      brint.render(
+        list(
+          () => outer,
+          () => [
+            "section",
+            {},
+            [
+              list(
+                () => inner,
+                (m: { id: number }) => ["div", { class: "item", "data-id": String(m.id) }],
+              ),
+            ],
+          ],
+        ),
+        container,
+      )
+      assert.equal(subs(), 1)
+
+      outer.splice(0, 1) // removes the section, and with it the nested list
+      assert.equal(container.querySelectorAll(".item").length, 0)
+      assert.equal(subs(), 0)
     })
   })
 })

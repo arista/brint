@@ -846,6 +846,10 @@ function cleanupRenderNode(renderNode: RenderNode): void {
     renderNode.listItemsCachedFunction.remove()
     renderNode.listItemsCachedFunction = null
   }
+  // As in RenderNode.remove(): drop the list subscription, or the source array
+  // retains this node and its DOM subtree.
+  renderNode.listUnsubscribe?.()
+  renderNode.listUnsubscribe = null
   renderNode.listItemsListener = null
   renderNode.list = null
 
@@ -1351,8 +1355,13 @@ function setupFunctionSpec(
   // Get initial child spec
   const childSpec = cf.call() as RenderSpec
 
-  // Set up listener for re-rendering on invalidation
+  // Set up listener for re-rendering on invalidation.
+  // Same staleness hazard as lists (see setupListSpec): the invalidation is queued
+  // at mutation time, so by the time it runs this node may have been removed or
+  // re-set-up with a different CachedFunction. Rendering from the superseded one
+  // would write a second copy of the subtree.
   cf.addListener(() => {
+    if (renderNode.functionCachedFunction !== cf) return
     const newChildSpec = cf.call() as RenderSpec
     renderOver(newChildSpec, renderNode, actualParentDomNode, xmlns, domain)
   })
@@ -1571,6 +1580,26 @@ function setupListSpec(
     }
   }
 
+  // A reactive notification is *queued* at mutation time and invoked later, during
+  // the transaction's drain (see chchchchanges' ChangeTransaction). So between the
+  // queueing and the call, this list can be torn down (node removed) or replaced
+  // (reconcileListSpec reuses the same RenderNode and installs a fresh listener).
+  // Either way the queued closure still fires, and would render items into a node
+  // it no longer owns — duplicating the whole list. A "removed" flag is not enough,
+  // because the reconcile case keeps the node alive; identity of the currently
+  // installed listener is what actually distinguishes live from stale.
+  let isStale = (): boolean => false
+
+  // Detaches whichever array the node is subscribed to *now* — the reactive-items
+  // branch re-points `renderNode.list` when the items function returns a new array.
+  const installUnsubscribe = () => {
+    renderNode.listUnsubscribe = () => {
+      if (renderNode.list && renderNode.listItemsListener) {
+        domain.unsubscribe(renderNode.list, renderNode.listItemsListener)
+      }
+    }
+  }
+
   if (typeof items === "function") {
     // Reactive items source - wrap in CachedFunction
     const itemsCF = domain.createCachedFunction(items)
@@ -1583,17 +1612,20 @@ function setupListSpec(
 
     // Subscribe to the list for surgical updates
     const subscriptionListener: SubscriptionListener = (change: Change) => {
+      if (isStale()) return
       handleListChange(change)
     }
     renderNode.listItemsListener = subscriptionListener
+    isStale = () => renderNode.listItemsListener !== subscriptionListener
+    installUnsubscribe()
     domain.subscribe(initialItems, subscriptionListener)
 
     // Set up listener for when the items function returns a different array
     itemsCF.addListener(() => {
+      if (isStale()) return
+
       // Unsubscribe from old list
-      if (renderNode.list && renderNode.listItemsListener) {
-        domain.unsubscribe(renderNode.list, renderNode.listItemsListener)
-      }
+      renderNode.listUnsubscribe?.()
 
       // Get new items
       const newItems = itemsCF.call() as unknown[]
@@ -1612,9 +1644,12 @@ function setupListSpec(
 
     // Subscribe to the static array for changes
     const subscriptionListener: SubscriptionListener = (change: Change) => {
+      if (isStale()) return
       handleListChange(change)
     }
     renderNode.listItemsListener = subscriptionListener
+    isStale = () => renderNode.listItemsListener !== subscriptionListener
+    installUnsubscribe()
     domain.subscribe(items, subscriptionListener)
   }
 }
@@ -1687,9 +1722,8 @@ function reconcileListSpec(
     existingNode.listItemsCachedFunction.remove()
     existingNode.listItemsCachedFunction = null
   }
-  if (existingNode.list && existingNode.listItemsListener) {
-    domain.unsubscribe(existingNode.list, existingNode.listItemsListener)
-  }
+  existingNode.listUnsubscribe?.()
+  existingNode.listUnsubscribe = null
   existingNode.listItemsListener = null
   existingNode.list = null
 

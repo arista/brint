@@ -105,6 +105,13 @@ export class RenderNode {
   /** Current list items array (for unsubscribing and surgical updates) */
   list: unknown[] | null = null
 
+  /**
+   * Detaches this node's list subscription from whatever array it is currently
+   * subscribed to. Installed by the renderer (which owns the ChangeDomain that
+   * this class deliberately knows nothing about) and safe to call more than once.
+   */
+  listUnsubscribe: (() => void) | null = null
+
   /** RenderContext state (change-enabled application data) */
   contextState: unknown = null
 
@@ -270,7 +277,10 @@ export class RenderNode {
       this.listItemsCachedFunction.remove()
       this.listItemsCachedFunction = null
     }
-    // Note: listItemsListener unsubscribe is handled by the renderer before calling remove()
+    // Detach the list subscription. Without this the source array keeps the
+    // listener — and through it this node and its whole DOM subtree — alive.
+    this.listUnsubscribe?.()
+    this.listUnsubscribe = null
     this.listItemsListener = null
     this.list = null
   }
