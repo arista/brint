@@ -19,6 +19,17 @@ export const List = Symbol("List")
  */
 export const Manage = Symbol("Manage")
 
+/**
+ * Where `component()` records the component function a spec came from.
+ *
+ * A FunctionRenderSpec is just a closure, so without this the renderer cannot
+ * tell `component(LoginPage, …)` from `component(VerifyCodePage, …)` — or from a
+ * plain `() => …` thunk — and has to assume any two of them are the same thing.
+ * The component function is the natural identity for a component: two specs are
+ * the same component when they were built from the same function.
+ */
+export const ComponentFn = Symbol("ComponentFn")
+
 // ============================================================================
 // RenderSpec Types
 // ============================================================================
@@ -40,7 +51,10 @@ export type NullRenderSpec = null | undefined
 
 export type TextRenderSpec = string | number
 
-export type FunctionRenderSpec = (ctx: RenderContext) => RenderSpec
+export type FunctionRenderSpec = ((ctx: RenderContext) => RenderSpec) & {
+  /** Set by `component()`; absent on bare thunks. See {@link ComponentFn}. */
+  [ComponentFn]?: unknown
+}
 
 // ElementRenderSpec always requires an ElementArgs object as the second element.
 // This distinguishes it from RenderSpec[] (array of children) which may start with a string.
@@ -304,5 +318,9 @@ export function component<P>(
   fn: (props: P, ctx: RenderContext) => RenderSpec,
   props: P,
 ): FunctionRenderSpec {
-  return (ctx) => fn(props, ctx)
+  const spec: FunctionRenderSpec = (ctx) => fn(props, ctx)
+  // Carry the component's identity so reconciliation can tell one component from
+  // another in the same slot (see ComponentFn).
+  spec[ComponentFn] = fn
+  return spec
 }

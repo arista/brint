@@ -2459,6 +2459,100 @@ describe("brint", () => {
     })
   })
 
+  describe("component identity", () => {
+    let container: Element
+
+    beforeEach(() => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+    })
+
+    // Two pages with identical structure in the same slot. Without component
+    // identity these reconcile: the element is reused, so onMount never fires for
+    // the incoming page and whatever the user typed survives the swap.
+    const LoginPage = (p: { onMount: (el: Node | null) => void }): RenderSpec => [
+      "form",
+      {},
+      [["div", {}, [["input", { class: "email", onMount: p.onMount }]]]],
+    ]
+    const VerifyPage = (p: { onMount: (el: Node | null) => void }): RenderSpec => [
+      "form",
+      {},
+      [["div", {}, [["input", { class: "otp", onMount: p.onMount }]]]],
+    ]
+
+    it("rebuilds when a different component takes the slot", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const m = domain.enableChanges({ page: "login" as "login" | "verify" })
+
+      const mounted: string[] = []
+      const onMount = (el: Node | null) => mounted.push((el as Element).className)
+
+      const Page = (p: { page: string }): RenderSpec =>
+        p.page === "login" ? component(LoginPage, { onMount }) : component(VerifyPage, { onMount })
+
+      brint.render(component(Page, m), container)
+      assert.deepEqual(mounted, ["email"])
+
+      const before = container.querySelector("input") as HTMLInputElement
+      before.value = "typed into the login form"
+
+      m.page = "verify"
+
+      assert.deepEqual(mounted, ["email", "otp"]) // onMount ran for the new page
+      const after = container.querySelector("input") as HTMLInputElement
+      assert.notEqual(after, before) // fresh element, not morphed
+      assert.equal(after.value, "") // no state carried across the swap
+    })
+
+    it("reconciles when the same component gets new props", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const m = domain.enableChanges({ label: "one" })
+
+      let mounts = 0
+      const Inner = (p: { label: string }): RenderSpec => [
+        "input",
+        { class: "f", "data-label": p.label, onMount: () => mounts++ },
+      ]
+      const Outer = (p: { label: string }): RenderSpec => component(Inner, { label: p.label })
+
+      brint.render(component(Outer, m), container)
+      const node = container.querySelector(".f")!
+      assert.equal(mounts, 1)
+
+      m.label = "two"
+
+      assert.equal(container.querySelector(".f"), node) // same element preserved
+      assert.equal(node.getAttribute("data-label"), "two")
+      assert.equal(mounts, 1) // not a remount
+    })
+
+    it("still reconciles bare thunks, which carry no identity", () => {
+      const domain = new ChangeDomain()
+      const brint = create({ changeDomain: domain })
+      const m = domain.enableChanges({ n: 1 })
+
+      let mounts = 0
+      const Outer = (p: { n: number }): RenderSpec => [
+        "div",
+        {},
+        [() => ["span", { class: "s", "data-n": String(p.n), onMount: () => mounts++ }]],
+      ]
+
+      brint.render(component(Outer, m), container)
+      const node = container.querySelector(".s")!
+      assert.equal(mounts, 1)
+
+      m.n = 2
+
+      assert.equal(container.querySelector(".s"), node)
+      assert.equal(node.getAttribute("data-n"), "2")
+      assert.equal(mounts, 1)
+    })
+  })
+
   describe("onMount position", () => {
     let container: Element
 

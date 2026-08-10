@@ -11,7 +11,7 @@ import type {
   ListItemsSpec,
   ManageRenderSpec,
 } from "./index.js"
-import { List, Manage } from "./index.js"
+import { List, Manage, ComponentFn } from "./index.js"
 import {
   RenderNode,
   type ReactiveElementValue,
@@ -1030,9 +1030,19 @@ function canReconcile(spec: RenderSpec, existingNode: RenderNode): boolean {
     return true
   }
 
-  // FunctionRenderSpec, FragmentRenderSpec, etc. - DOM-less nodes can reconcile
-  // with other DOM-less nodes of the same type
+  // FunctionRenderSpec: a component only reconciles with the SAME component.
+  // `component(LoginPage, …)` replacing `component(VerifyCodePage, …)` in a slot
+  // is a different thing, not the same thing with new props — reconciling them
+  // would morph one page's DOM into the other's, silently carrying over element
+  // state (a typed-in <input> value) and skipping onMount on the way in.
+  // Bare thunks carry no identity, so they keep reconciling as before; so does a
+  // thunk paired with a component, which is not a case worth churning over.
   if (isFunctionRenderSpec(spec) && isFunctionRenderSpec(existingSpec)) {
+    const newFn = spec[ComponentFn]
+    const existingFn = existingSpec[ComponentFn]
+    if (newFn !== undefined && existingFn !== undefined) {
+      return newFn === existingFn
+    }
     return true
   }
 
