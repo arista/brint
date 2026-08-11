@@ -4,6 +4,12 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
+- **Element effects** — proposal only, nothing built. A reactive imperative hook
+  against an element (`effect: e => {...}`), for driving self-animating custom
+  elements like `wa-dialog`. See [element-effects](./docs/element-effects.md);
+  it also records a suspected teardown leak in the surgical list-update path and
+  a `CachedFunction` non-diffing behaviour taterhome now depends on.
+
 ## Docs and references
 
 When working, remember that most of the technical design is in [design](./docs/design.md), informed by the [overview](./docs/overview.md). There is also an older [analysis](./overview-analysis.md) that might be helpful, but might be out of date with respect to the design document.
