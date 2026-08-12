@@ -15,6 +15,7 @@ import type {
   ElementChildRenderSpecs,
   DomEventHandlers,
   ElementMountCallback,
+  ElementEffect,
   StyleElementArgsEntries,
   PropertiesElementArgsValue,
   ElementValue,
@@ -71,6 +72,8 @@ export interface BaseElementArgs {
   // receiving the element's DOM node. Return a function to run on unmount.
   onMount?: ElementMountCallback
   properties?: PropertiesElementArgsValue
+  // Reactive imperative hook against the element. Build it with `effect()`.
+  effect?: ElementEffect
   xmlns?: string
   id?: ElementValue
   class?: ElementValue
@@ -90,6 +93,7 @@ export interface BaseElementArgs {
     | DomEventHandlers
     | ElementMountCallback
     | PropertiesElementArgsValue
+    | ElementEffect
     | undefined
 }
 

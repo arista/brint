@@ -10,6 +10,7 @@ import type {
   ListRenderSpec,
   ListItemsSpec,
   ManageRenderSpec,
+  ElementEffect,
 } from "./index.js"
 import { List, Manage, ComponentFn } from "./index.js"
 import {
@@ -335,6 +336,7 @@ function applyAttributes(
       key === "style" ||
       key === "on" ||
       key === "properties" ||
+      key === "effect" ||
       key === "xmlns" ||
       key === "onMount"
     ) {
@@ -600,6 +602,58 @@ function applyProperties(
 }
 
 /**
+ * Run the cleanup returned by an effect's previous run, if any.
+ */
+function clearEffect(renderNode: RenderNode): void {
+  renderNode.pendingEffect = null
+  const cleanup = renderNode.effectCleanup
+  if (cleanup) {
+    renderNode.effectCleanup = null
+    cleanup()
+  }
+}
+
+/**
+ * Set up an element's `effect` arg. The source is tracked; the callback is not.
+ *
+ * The first run is queued rather than made here, because args are applied before
+ * the element is inserted (and, for a moved node, before it reaches its final
+ * position). Re-runs happen synchronously when the source is invalidated —
+ * including when it recomputes to the same value, which is the same contract
+ * reactive attributes and properties have.
+ */
+function applyEffect(
+  element: Element,
+  effect: ElementEffect,
+  domain: ChangeDomain,
+  renderNode: RenderNode,
+): void {
+  const cf = domain.createCachedFunction(effect.source)
+  renderNode.addCleanup(cf)
+
+  const run = () => {
+    // Cleanup before the next run, so an effect that attaches something detaches
+    // it first rather than stacking.
+    const cleanup = renderNode.effectCleanup
+    if (cleanup) {
+      renderNode.effectCleanup = null
+      cleanup()
+    }
+    // cf.call() is the only tracked part. The callback runs outside it, so its
+    // reads do not become dependencies and its writes still notify.
+    const value = cf.call()
+    const result = effect.callback(element, value)
+    renderNode.effectCleanup = typeof result === "function" ? result : null
+  }
+
+  // Safe to attach before the first run: an uncalled CachedFunction has no
+  // dependencies yet, so nothing can invalidate it in the meantime.
+  cf.addListener(run)
+
+  renderNode.pendingEffect = run
+}
+
+/**
  * Render a RenderSpec into a RenderNode, optionally inserting into the DOM.
  *
  * @param spec The RenderSpec to render
@@ -631,6 +685,10 @@ function applyElementArgs(
 
   if (args.properties) {
     applyProperties(element, args.properties, domain, renderNode)
+  }
+
+  if (args.effect) {
+    applyEffect(element, args.effect, domain, renderNode)
   }
 }
 
@@ -744,6 +802,11 @@ function renderInner(
         renderNode.onMountCallbacks = []
       }
       renderNode.onMountCallbacks.push(args.onMount)
+    }
+
+    // One scheduleMount for both, or a node with an onMount *and* an effect
+    // would be queued twice and fire its onMount twice.
+    if (renderNode.onMountCallbacks || renderNode.pendingEffect) {
       scheduleMount(renderNode)
     }
 
@@ -767,6 +830,13 @@ function renderInner(
       // Children provided: brint takes ownership — clear existing, render ours.
       element.replaceChildren()
       renderElementChildren(renderNode, element, children, managedChildXmlns(element), domain)
+    }
+
+    // A managed element is never created or moved by brint, so its effect has no
+    // "final position" to wait for — but it still runs with the mount queue, so
+    // that effect timing is one rule rather than two.
+    if (renderNode.pendingEffect) {
+      scheduleMount(renderNode)
     }
 
     return renderNode
@@ -855,6 +925,7 @@ function cleanupRenderNode(renderNode: RenderNode): void {
   // Run onMount cleanup callbacks (unmount). Removal via lists/conditionals goes
   // through here, not reconciliation, so without this the cleanups would leak.
   callLifecycleCleanups(renderNode)
+  clearEffect(renderNode)
 
   // Clean up this node's reactive state. The CachedFunctions have to be removed,
   // not just dereferenced: an attribute's or style's update reads back through
@@ -1289,6 +1360,15 @@ function reconcileElement(
     applyProperties(element, args.properties, domain, existingNode)
   }
 
+  // Handle the effect. clearReactiveState above already removed its
+  // CachedFunction, so without re-applying here the effect would simply stop —
+  // and the outgoing effect's cleanup has to run before the incoming one starts.
+  clearEffect(existingNode)
+  if (args?.effect) {
+    applyEffect(element, args.effect, domain, existingNode)
+    scheduleEffect(existingNode)
+  }
+
   // Reconcile children
   const childSpecs: RenderSpec[] = children
     ? isRenderSpecArray(children)
@@ -1366,28 +1446,51 @@ function createRenderContext(renderNode: RenderNode, domain: ChangeDomain): Rend
  * So mounts are queued for the duration of a render pass and flushed once the
  * tree has settled. Nested passes join the outermost queue.
  */
-let mountQueue: RenderNode[] | null = null
+/**
+ * An effect's first run wants the same guarantee, so it rides the same queue.
+ * `effectOnly` is for reconciliation, which re-establishes an element's effect
+ * against the new args while the element itself stays mounted — its onMount has
+ * already fired and must not fire again.
+ */
+type MountQueueEntry = { node: RenderNode; effectOnly: boolean }
+
+let mountQueue: MountQueueEntry[] | null = null
 
 function deferMounts<T>(fn: () => T): T {
   if (mountQueue) return fn()
-  const queue: RenderNode[] = []
+  const queue: MountQueueEntry[] = []
   mountQueue = queue
   try {
     return fn()
   } finally {
     mountQueue = null
-    for (const node of queue) {
-      callOnMountCallbacks(node)
+    for (const entry of queue) {
+      flushMountQueueEntry(entry)
     }
   }
 }
 
-function scheduleMount(renderNode: RenderNode): void {
+function enqueueMount(entry: MountQueueEntry): void {
   if (mountQueue) {
-    mountQueue.push(renderNode)
+    mountQueue.push(entry)
   } else {
-    callOnMountCallbacks(renderNode)
+    flushMountQueueEntry(entry)
   }
+}
+
+function scheduleMount(renderNode: RenderNode): void {
+  enqueueMount({ node: renderNode, effectOnly: false })
+}
+
+function scheduleEffect(renderNode: RenderNode): void {
+  enqueueMount({ node: renderNode, effectOnly: true })
+}
+
+function flushMountQueueEntry({ node, effectOnly }: MountQueueEntry): void {
+  if (!effectOnly) {
+    callOnMountCallbacks(node)
+  }
+  runPendingEffect(node)
 }
 
 function callOnMountCallbacks(renderNode: RenderNode): void {
@@ -1401,6 +1504,15 @@ function callOnMountCallbacks(renderNode: RenderNode): void {
       }
       renderNode.lifecycleCleanups.push(cleanup)
     }
+  }
+}
+
+/** Runs after onMount, so an effect sees whatever the mount callbacks set up. */
+function runPendingEffect(renderNode: RenderNode): void {
+  const pendingEffect = renderNode.pendingEffect
+  if (pendingEffect) {
+    renderNode.pendingEffect = null
+    pendingEffect()
   }
 }
 

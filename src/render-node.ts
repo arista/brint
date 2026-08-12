@@ -131,6 +131,16 @@ export class RenderNode {
   /** Cleanup callbacks returned from onMount (called during removal) */
   lifecycleCleanups: Array<() => void> | null = null
 
+  /**
+   * The `effect` arg's first run, waiting on the mount queue. Cleared once it
+   * has run. Kept separate from onMountCallbacks because an effect's cleanup is
+   * re-run on every invalidation, not only at unmount.
+   */
+  pendingEffect: (() => void) | null = null
+
+  /** Cleanup returned by the most recent run of the `effect` arg */
+  effectCleanup: (() => void) | null = null
+
   /** All CachedFunctions to clean up when this node is removed */
   private cleanupFunctions: Array<CachedFunction<unknown>> = []
 
@@ -258,6 +268,14 @@ export class RenderNode {
       child.remove()
     }
     this.children = []
+
+    // Run the effect's cleanup, and drop a first run that never happened
+    this.pendingEffect = null
+    if (this.effectCleanup) {
+      const cleanup = this.effectCleanup
+      this.effectCleanup = null
+      cleanup()
+    }
 
     // Call lifecycle cleanup callbacks (after children have cleaned up)
     if (this.lifecycleCleanups) {

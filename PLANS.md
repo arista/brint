@@ -4,11 +4,16 @@ This document tracks the roadmap and planned features for brint
 
 ## Current Focus
 
-- **Element effects** — proposal only, nothing built. A reactive imperative hook
-  against an element (`effect: e => {...}`), for driving self-animating custom
-  elements like `wa-dialog`. See [element-effects](./docs/element-effects.md);
-  it also records a suspected teardown leak in the surgical list-update path and
-  a `CachedFunction` non-diffing behaviour taterhome now depends on.
+- **Element effects** — built. A reactive imperative hook against an element,
+  `effect: effect(source, callback)`, for driving self-animating custom elements
+  like `wa-dialog`. Tracked source, untracked callback; first run on the mount
+  queue. See [element-effects](./docs/element-effects.md) for the decisions,
+  including why the companion `untracked()` for chchchchanges was not needed.
+  The suspected teardown leak recorded alongside the proposal was real — on two
+  paths, not one — and was fixed first.
+
+  Not yet consumed: taterhome's auth modal is still on the imperative
+  element-handoff it used before this existed.
 
 ## Docs and references
 

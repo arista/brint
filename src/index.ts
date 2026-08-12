@@ -70,6 +70,7 @@ export type ElementArgs = {
   style?: StyleElementArgsEntries
   on?: DomEventHandlers
   properties?: PropertiesElementArgsValue
+  effect?: ElementEffect
   xmlns?: string
   onMount?: OnMountCallback
 } & NormalElementArgs
@@ -92,6 +93,22 @@ export type OptionsDomEventHandler = {
 export type PropertiesElementArgsValue = Record<string | symbol, PropertiesElementArgsItem>
 
 export type PropertiesElementArgsItem = (() => unknown) | unknown
+
+/**
+ * An element's `effect` arg — see the `effect()` helper, which is the only
+ * supported way to build one (it exists to infer the source's type for the
+ * callback).
+ *
+ * The value type is erased here because `ElementArgs` is not generic; `effect()`
+ * ties the two halves together at the call site.
+ */
+export type ElementEffect = {
+  source: () => unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  callback: ElementEffectCallback<any>
+}
+
+export type ElementEffectCallback<T> = (element: Element, value: T) => void | (() => void)
 
 export type ElementValue = PrimitiveElementValue | ArrayElementValue | FunctionElementValue
 
@@ -300,6 +317,52 @@ export function manage(
   return children === undefined
     ? [Manage, { element, args }]
     : [Manage, { element, args, children }]
+}
+
+/**
+ * Build an element's `effect` arg: a reactive hook for driving an element
+ * imperatively, for the things that are not "assign this value to that
+ * attribute" — a custom element that animates itself, an observer to attach and
+ * detach, a canvas to redraw.
+ *
+ * `source` is tracked: whatever it reads is subscribed to, and the effect re-runs
+ * when any of it changes. `callback` is **not** tracked, so it is free to read
+ * anything without creating a dependency, and to write model state (a write
+ * inside a tracking scope would be applied but not notified).
+ *
+ * The first run is deferred until the element is mounted in its final position,
+ * for the same reason `onMount` is (see the mount queue in the renderer);
+ * re-runs are synchronous on invalidation. A returned function is the cleanup,
+ * run before each re-run and again when the element is removed.
+ *
+ * Note that the callback is invoked on every *invalidation* of the source, not
+ * only when its value differs from last time — consistent with reactive
+ * attributes and properties, and for the same reason (brint's last value is not
+ * the element's current state).
+ *
+ * The rule that comes with this: an effect may only touch element state brint
+ * does not otherwise manage. If a reactive attribute, a reactive property and an
+ * effect all write the same thing, the conflict is silent.
+ *
+ * @example
+ * // wa-dialog animates its own open and close; `open` is the only public lever
+ * el("wa-dialog", {
+ *   effect: effect(
+ *     () => props.dialogOpen,
+ *     (e, open) => { (e as WaDialog).open = open },
+ *   ),
+ * })
+ *
+ * @example
+ * // Multiple sources: return a composite. No diffing is done on it, so a fresh
+ * // object each time is fine.
+ * effect(
+ *   () => ({ width: state.width, height: state.height }),
+ *   (e, { width, height }) => resize(e as HTMLCanvasElement, width, height),
+ * )
+ */
+export function effect<T>(source: () => T, callback: ElementEffectCallback<T>): ElementEffect {
+  return { source, callback: callback as ElementEffect["callback"] }
 }
 
 /**
