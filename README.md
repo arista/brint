@@ -274,6 +274,66 @@ h.div({
 
 Timing mirrors `ctx.onMount`: callbacks fire bottom-up (a child's `onMount` before its parent's), and cleanups run when the element is removed by a conditional, list change, or `unmount()`. An element's `onMount` fires once when it's created; it does not re-fire on reconciliation.
 
+### Element Effects (`effect`)
+
+Reactive attributes, styles and properties all end in "assign this value". An `effect` is for the cases that don't: a custom element that animates itself, an observer to attach and detach, a canvas to redraw. Where `onMount` runs once, an effect re-runs whenever the data it watches changes.
+
+Build one with the `effect()` helper, which takes a **source** and a **callback**:
+
+```typescript
+import { effect } from "brint"
+
+h.el("wa-dialog", {
+  // The dialog animates its own open and close; `open` is the only public lever
+  effect: effect(
+    () => state.dialogOpen,
+    (el, open) => {
+      ;(el as WaDialog).open = open
+    },
+  ),
+})
+```
+
+(Use a block body. A concise arrow body returns the assignment's value, which the callback's `void | (() => void)` return type rejects — the same papercut as React's `useEffect`.)
+
+The **source** is tracked: anything it reads becomes a dependency, and the effect re-runs when any of it changes. The **callback** receives the element and the source's current value, and is _not_ tracked — it can read whatever it likes without creating a dependency, and it can write model state.
+
+That split is deliberate, and it's the opposite of what most reactive libraries do (Solid's `createEffect`, Svelte's `$effect`, Vue's `watchEffect` all track the body). A write to change-enabled data from inside a tracking context is applied but **not** notified, so a tracked body would silently swallow model updates made from the very primitive people reach for to make them. Keeping only the source tracked removes that trap.
+
+Watch several things at once by returning a composite. Nothing diffs it, so allocating a fresh object each time is fine:
+
+```typescript
+effect(
+  () => ({ width: state.width, height: state.height }),
+  (el, { width, height }) => redraw(el as HTMLCanvasElement, width, height),
+)
+```
+
+Return a function to clean up. It runs before each re-run, and again when the element is removed:
+
+```typescript
+h.div({
+  effect: effect(
+    () => state.watchedElement,
+    (el, enabled) => {
+      if (!enabled) return
+      const observer = new IntersectionObserver(/* … */)
+      observer.observe(el)
+      return () => observer.disconnect()
+    },
+  ),
+})
+```
+
+Timing and semantics:
+
+- **The first run is deferred to mount**, alongside `onMount` and for the same reason — the element is connected, upgraded, and in its final position. Within an element, `onMount` runs first, so the effect sees whatever it set up.
+- **Re-runs are synchronous** when the source is invalidated.
+- **Re-runs happen on invalidation, not on change.** If the source recomputes to the same value, the callback still runs. This matches reactive attributes and properties: brint's record of what it last applied is not the element's current state, since elements modify themselves.
+- **Reconciliation replaces the effect.** When a re-rendering component produces the same element, the outgoing effect's cleanup runs and the incoming one takes over. (`onMount`, by contrast, does not re-fire.)
+
+One rule comes with this: **an effect may only touch element state brint does not otherwise manage.** If a reactive attribute or property and an effect both write the same thing, whichever ran last wins, and nothing warns you.
+
 ### Component Reactivity
 
 When used with the `component()` helper, component functions run inside a change-detection context. Any change-enabled data accessed during execution becomes a dependency. When that data changes, the component re-renders.
@@ -463,6 +523,25 @@ manage(document.documentElement, { class: () => themeClasses() })
 // With children — brint owns the element's child content
 manage(document.querySelector("title")!, {}, () => state.pageTitle)
 ```
+
+### `effect(source, callback)`
+
+Builds an element's `effect` arg — a reactive imperative hook onto the element. The source is tracked; the callback is not. See [Element Effects](#element-effects-effect).
+
+```typescript
+import { effect } from "brint"
+
+h.el("wa-dialog", {
+  effect: effect(
+    () => state.dialogOpen,
+    (el, open) => {
+      ;(el as WaDialog).open = open
+    },
+  ),
+})
+```
+
+The callback may return a cleanup function, run before each re-run and when the element is removed. Use the helper rather than writing the object literal by hand — it's what infers the source's type for the callback.
 
 ### `component(fn, props)`
 
