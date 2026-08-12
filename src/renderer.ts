@@ -856,7 +856,12 @@ function cleanupRenderNode(renderNode: RenderNode): void {
   // through here, not reconciliation, so without this the cleanups would leak.
   callLifecycleCleanups(renderNode)
 
-  // Clean up this node's reactive state
+  // Clean up this node's reactive state. The CachedFunctions have to be removed,
+  // not just dereferenced: an attribute's or style's update reads back through
+  // the map below and so goes quiet on its own, but a property's update closes
+  // over its CachedFunction directly and would keep recomputing and writing to a
+  // detached element.
+  renderNode.removeCachedFunctions()
   if (renderNode.reactiveAttributes) {
     renderNode.reactiveAttributes = null
   }
@@ -1299,6 +1304,13 @@ function reconcileElement(
  * need the element reference for removeEventListener calls.
  */
 function clearReactiveState(node: RenderNode): void {
+  // The outgoing args' CachedFunctions must be unsubscribed, not just forgotten.
+  // The node survives reconciliation and gets a fresh set from the new args, so
+  // without this every re-render leaves another generation of thunks subscribed —
+  // each one still recomputing, and (for properties, which close over their
+  // CachedFunction) still writing its stale value to the element.
+  node.removeCachedFunctions()
+
   // Clean up reactive attributes
   if (node.reactiveAttributes) {
     node.reactiveAttributes = null

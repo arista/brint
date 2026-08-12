@@ -146,6 +146,23 @@ export class RenderNode {
   }
 
   /**
+   * Unsubscribe and drop every CachedFunction registered via `addCleanup` —
+   * the ones backing this element's reactive attributes, styles and properties.
+   *
+   * This is separate from `remove()` because the CachedFunctions also have to go
+   * when the node itself survives: reconciling an element replaces its args, so
+   * the outgoing thunks must stop firing even though the RenderNode stays.
+   * Dropping the `reactive*` maps is not enough — a CachedFunction is registered
+   * with its change sources, not with the map.
+   */
+  removeCachedFunctions(): void {
+    for (const cf of this.cleanupFunctions) {
+      cf.remove()
+    }
+    this.cleanupFunctions = []
+  }
+
+  /**
    * Add a child RenderNode at the end
    */
   appendChild(child: RenderNode): void {
@@ -258,10 +275,7 @@ export class RenderNode {
     }
 
     // Clean up all CachedFunctions
-    for (const cf of this.cleanupFunctions) {
-      cf.remove()
-    }
-    this.cleanupFunctions = []
+    this.removeCachedFunctions()
     this.reactiveAttributes = null
     this.reactiveStyles = null
     this.reactiveProperties = null

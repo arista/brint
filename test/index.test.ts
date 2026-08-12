@@ -4,6 +4,13 @@ import { Window } from "happy-dom"
 import { create, List, RenderNode, component, list, type RenderSpec } from "../src/index.js"
 import { ChangeDomain, getProxyState } from "chchchchanges"
 
+/**
+ * Read a value purely to register a reactive dependency on it. A bare
+ * `state.foo` expression statement would do the same, but trips
+ * no-unused-expressions.
+ */
+const track = (_value: unknown): void => {}
+
 // Set up DOM environment
 let window: Window
 let document: Document
@@ -889,6 +896,45 @@ describe("brint", () => {
         assert.equal(input.value, "new-value")
         assert.equal(input.placeholder, "static-value")
       })
+
+      // Pinning test. Do not "optimize" this into a value-equality short-circuit:
+      // brint's record of what it last applied is not the element's current
+      // value. Elements write their own state (the same reason managedAttributes
+      // exists — see RenderNode), so skipping an unchanged recomputation would
+      // leave the element permanently out of sync with the model that binds it.
+      it("should re-apply a reactive property on invalidation even when the value is unchanged", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ tick: 0, value: "model" })
+
+        brint.render(
+          [
+            "input",
+            {
+              properties: {
+                value: () => {
+                  track(state.tick)
+                  return state.value
+                },
+              },
+            },
+          ],
+          container,
+        )
+
+        const input = container.firstChild as HTMLInputElement
+        assert.equal(input.value, "model")
+
+        // Something other than brint writes the property — a user typing, or a
+        // custom element reflecting its own state.
+        input.value = "set-by-the-element"
+
+        // Invalidate without changing what the thunk computes
+        state.tick = 1
+
+        assert.equal(input.value, "model")
+      })
     })
 
     describe("cleanup", () => {
@@ -972,6 +1018,89 @@ describe("brint", () => {
         state.b = "bbb"
         assert.equal(callCountA, 2)
         assert.equal(callCountB, 2)
+      })
+
+      // Reactive attributes and styles route their update through
+      // renderNode.reactiveAttributes/reactiveStyles, so nulling those maps
+      // happens to leave the CachedFunction inert. Reactive *properties* close
+      // over their CachedFunction directly, so they are the case that shows
+      // whether teardown actually unsubscribes.
+      it("should cleanup a surgically removed list item's reactive properties", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ value: "test" })
+        const items = domain.enableChanges(["a", "b"])
+        const callCounts = new Map<string, number>()
+
+        brint.render(
+          list(
+            () => items,
+            (item: string) => [
+              "div",
+              {
+                properties: {
+                  title: () => {
+                    callCounts.set(item, (callCounts.get(item) ?? 0) + 1)
+                    return state.value
+                  },
+                },
+              },
+            ],
+          ),
+          container,
+        )
+
+        assert.equal(callCounts.get("a"), 1)
+        assert.equal(callCounts.get("b"), 1)
+
+        // Surgical removal: goes through cleanupRenderNode(), not RenderNode.remove()
+        items.pop()
+        assert.equal(container.children.length, 1)
+
+        // The removed item's CachedFunction must be unsubscribed, or it keeps
+        // recomputing and writing to an element that is no longer in the document.
+        state.value = "updated"
+        assert.equal(callCounts.get("a"), 2)
+        assert.equal(callCounts.get("b"), 1)
+      })
+
+      it("should cleanup reactive properties replaced by element reconciliation", () => {
+        const domain = new ChangeDomain()
+        const brint = create({ changeDomain: domain })
+
+        const state = domain.enableChanges({ generation: 0, value: "test" })
+        let callCount = 0
+
+        brint.render(() => {
+          // Read in the body, so bumping it re-runs the body and reconciles
+          // the element rather than only invalidating the thunk.
+          track(state.generation)
+          return [
+            "div",
+            {
+              properties: {
+                // A fresh thunk each time the body runs, so reconciliation must
+                // discard the previous one rather than leave it subscribed
+                // alongside its replacement.
+                title: () => {
+                  callCount++
+                  return state.value
+                },
+              },
+            },
+          ]
+        }, container)
+
+        assert.equal(callCount, 1)
+
+        // Re-render the body: reconcileElement() replaces the reactive property
+        state.generation = 1
+        assert.equal(callCount, 2)
+
+        // Only the surviving thunk should recompute — one call, not two
+        state.value = "updated"
+        assert.equal(callCount, 3)
       })
     })
 
